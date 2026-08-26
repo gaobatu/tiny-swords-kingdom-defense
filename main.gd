@@ -53,6 +53,7 @@ var tree_tex: Texture2D
 var sfx_streams: Dictionary = {}
 var sfx_players: Array[AudioStreamPlayer] = []
 var sfx_player_index := 0
+var music_player: AudioStreamPlayer
 
 func localize(english: String, chinese_text: String) -> String:
 	return chinese_text if chinese else english
@@ -84,7 +85,56 @@ func _ready() -> void:
 	enemy_tex = load("res://Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/Units/Red Units/Warrior/Warrior_Run.png")
 	tree_tex = load("res://Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/Terrain/Resources/Wood/Trees/Tree2.png")
 	setup_sound_effects()
+	setup_background_music()
 	queue_redraw()
+
+func setup_background_music() -> void:
+	music_player = AudioStreamPlayer.new()
+	music_player.volume_db = -16.0
+	music_player.stream = create_harmonica_music()
+	add_child(music_player)
+	music_player.play()
+
+func midi_frequency(note: int) -> float:
+	return 440.0 * pow(2.0, (float(note) - 69.0) / 12.0)
+
+func create_harmonica_music() -> AudioStreamWAV:
+	var rate := 22050
+	var beat := 0.5
+	var melody := [67,69,71,72, 74,72,71,67, 64,67,69,71, 72,71,69,67, 67,69,71,74, 76,74,72,71, 69,71,72,69, 67,64,62,67]
+	var chords := [[48,52,55],[45,48,52],[41,45,48],[43,47,50],[48,52,55],[45,48,52],[43,47,50],[48,52,55]]
+	var duration := melody.size() * beat
+	var count := int(duration * rate)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	for i in count:
+		var t := float(i) / float(rate)
+		var note_index := mini(int(t / beat), melody.size() - 1)
+		var note_time := fmod(t, beat)
+		var note_env := minf(1.0, note_time / 0.055) * minf(1.0, (beat - note_time) / 0.1)
+		var vibrato := sin(TAU * 5.4 * t) * 0.006
+		var freq := midi_frequency(melody[note_index]) * (1.0 + vibrato)
+		var lead := sin(TAU * freq * t) * 0.58
+		lead += sin(TAU * freq * 2.0 * t) * 0.19
+		lead += sin(TAU * freq * 3.0 * t) * 0.11
+		lead += sound_noise(i, 73) * 0.035
+		var chord_index := mini(int(t / (beat * 4.0)), chords.size() - 1)
+		var pad := 0.0
+		for chord_note in chords[chord_index]:
+			var chord_freq := midi_frequency(chord_note)
+			pad += sin(TAU * chord_freq * t) * 0.075
+		var pulse := 0.04 * sin(TAU * 2.0 * t) * exp(-fmod(t, beat * 2.0) * 5.0)
+		var sample := lead * note_env * 0.62 + pad + pulse
+		bytes.encode_s16(i * 2, int(clampf(sample, -0.95, 0.95) * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = count
+	stream.data = bytes
+	return stream
 
 func setup_sound_effects() -> void:
 	var durations := {"arrow":0.16,"fireball":0.34,"freeze":0.38,"enemy_down":0.42,"enemy_attack":0.19,"build":0.34,"coin_gain":0.26,"coin_spend":0.24,"barrier_break":0.52}
