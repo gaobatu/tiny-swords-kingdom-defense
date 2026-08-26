@@ -24,6 +24,7 @@ var score := 0
 var selected_type := 0
 var selected_tower := -1
 var chinese := false
+var difficulty := 1 # 0 easy, 1 normal, 2 hard
 var enemies: Array[Dictionary] = []
 var towers: Array[Dictionary] = []
 var barriers: Array[Dictionary] = []
@@ -34,6 +35,7 @@ var shots: Array[Dictionary] = []
 var spawn_left := 0
 var spawn_timer := 0.0
 var boss_spawned_this_wave := false
+var bosses_spawned_this_wave := 0
 var wave_active := false
 var game_over := false
 var victory := false
@@ -55,6 +57,20 @@ func localize(english: String, chinese_text: String) -> String:
 func tower_name(type: int) -> String:
 	var chinese_names := ["弓箭塔", "火炮塔", "冰霜塔", "路障", "地基", "矿塔"]
 	return chinese_names[type] if chinese else TOWER_NAMES[type]
+
+func difficulty_name() -> String:
+	var english_names := ["EASY", "NORMAL", "HARD"]
+	var chinese_names := ["简单", "普通", "困难"]
+	return chinese_names[difficulty] if chinese else english_names[difficulty]
+
+func enemy_hp_multiplier() -> float:
+	return 0.5 if difficulty == 0 else 1.0
+
+func boss_count_for_wave(current_wave: int) -> int:
+	if difficulty == 2:
+		if current_wave == 10: return 2
+		return 1 if current_wave in [5,6,7,8] else 0
+	return 1 if current_wave in [5,10] else 0
 
 func _ready() -> void:
 	randomize_map()
@@ -117,6 +133,7 @@ func start_wave() -> void:
 	if wave_active or game_over: return
 	wave += 1
 	boss_spawned_this_wave = false
+	bosses_spawned_this_wave = 0
 	spawn_left = 5 + wave * 2
 	spawn_timer = 0.1
 	wave_active = true
@@ -124,14 +141,17 @@ func start_wave() -> void:
 	banner_time = 2.0
 
 func spawn_enemy() -> void:
-	var is_boss := wave in [5, 10] and not boss_spawned_this_wave
+	var boss_target := boss_count_for_wave(wave)
+	var is_boss := bosses_spawned_this_wave < boss_target
 	if is_boss:
 		boss_spawned_this_wave = true
-		enemies.append({"pos":active_path[0],"seg":0,"hp":BOSS_HP,"max_hp":BOSS_HP,"speed":42.0,"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK})
-		banner = localize("BOSS INCOMING — 4000 HP!", "BOSS 来袭——4000 点生命！")
+		bosses_spawned_this_wave += 1
+		var boss_hp := BOSS_HP * enemy_hp_multiplier()
+		enemies.append({"pos":active_path[0],"seg":0,"hp":boss_hp,"max_hp":boss_hp,"speed":42.0,"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK})
+		banner = localize("BOSS INCOMING — %d HP!", "BOSS 来袭——%d 点生命！") % int(boss_hp)
 		banner_time = 3.0
 		return
-	var hp := 55.0 + wave * 25.0
+	var hp := (55.0 + wave * 25.0) * enemy_hp_multiplier()
 	var fast := wave % 3 == 0 and spawn_left % 3 == 0
 	var tank := wave >= 4 and spawn_left % 5 == 0
 	if tank: hp *= 2.3
@@ -291,6 +311,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			banner = localize("Language switched to English", "语言已切换为中文")
 			banner_time = 2.0
 			return
+		if Rect2(PANEL_X+24,565,142,30).has_point(p):
+			if wave > 0 or wave_active:
+				banner = localize("Difficulty can only change before wave 1", "只能在第一波开始前更改难度")
+			else:
+				difficulty = (difficulty + 1) % 3
+				banner = localize("Difficulty: %s", "难度：%s") % difficulty_name()
+			banner_time = 2.0
+			return
 		var clicked_tower := nearest_tower(world_p, 48.0)
 		if clicked_tower >= 0:
 			selected_tower = clicked_tower
@@ -367,7 +395,7 @@ func sell_selected() -> void:
 	towers.remove_at(selected_tower); selected_tower = -1
 
 func restart_game() -> void:
-	gold=240; lives=20; wave=0; score=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; wave_active=false; game_over=false; victory=false; selected_tower=-1; randomize_map(); banner="A new random map begins"; banner_time=3.0
+	gold=240; lives=20; wave=0; score=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; bosses_spawned_this_wave=0; wave_active=false; game_over=false; victory=false; selected_tower=-1; randomize_map(); banner="A new random map begins"; banner_time=3.0
 
 func _draw() -> void:
 	# World
@@ -417,6 +445,7 @@ func _draw() -> void:
 		draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+28,500),"%s  %s%d"%[tower_name(t.type),localize("Lv.", "等级 "),t.level],HORIZONTAL_ALIGNMENT_LEFT,-1,20,TOWER_COLORS[t.type])
 		draw_button(Rect2(PANEL_X+24,510,110,48),localize("UPGRADE", "升级"),Color("#3d7ea6")); draw_button(Rect2(PANEL_X+146,510,110,48),localize("SELL", "出售"),Color("#a35d5d"))
 	draw_button(Rect2(PANEL_X+176,565,80,30),"中文" if not chinese else "EN",Color("#596f82"))
+	draw_button(Rect2(PANEL_X+24,565,142,30),localize("MODE: ", "难度：")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")))
 	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,604),localize("Tips", "提示"),HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("#f8d56b"))
 	draw_multiline_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,630),localize("Foundation: anywhere off-road\nMine: +10 gold / 3 sec\nIncome only during waves", "地基：可建在泥路外\n矿塔：每3秒获得10金币\n仅在波次中产生收益"),HORIZONTAL_ALIGNMENT_LEFT,220,16,18,Color("#c9d6df"))
 	if banner_time > 0:
