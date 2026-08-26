@@ -1,0 +1,7 @@
+.godot/
+__MACOSX/
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
