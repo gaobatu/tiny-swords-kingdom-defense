@@ -50,6 +50,9 @@ var archery_tex: Texture2D
 var barracks_tex: Texture2D
 var enemy_tex: Texture2D
 var tree_tex: Texture2D
+var sfx_streams: Dictionary = {}
+var sfx_players: Array[AudioStreamPlayer] = []
+var sfx_player_index := 0
 
 func localize(english: String, chinese_text: String) -> String:
 	return chinese_text if chinese else english
@@ -80,7 +83,78 @@ func _ready() -> void:
 	barracks_tex = load("res://Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/Buildings/Blue Buildings/Barracks.png")
 	enemy_tex = load("res://Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/Units/Red Units/Warrior/Warrior_Run.png")
 	tree_tex = load("res://Tiny Swords (Free Pack)/Tiny Swords (Free Pack)/Terrain/Resources/Wood/Trees/Tree2.png")
+	setup_sound_effects()
 	queue_redraw()
+
+func setup_sound_effects() -> void:
+	var durations := {"arrow":0.16,"fireball":0.34,"freeze":0.38,"enemy_down":0.42,"enemy_attack":0.19,"build":0.34,"coin_gain":0.26,"coin_spend":0.24,"barrier_break":0.52}
+	for sound_name in durations:
+		sfx_streams[sound_name] = create_sound(sound_name, durations[sound_name])
+	for i in 12:
+		var player := AudioStreamPlayer.new()
+		player.volume_db = -7.0
+		add_child(player)
+		sfx_players.append(player)
+
+func sound_noise(index: int, seed: int) -> float:
+	var n := sin(float(index * 127 + seed * 311) * 12.9898) * 43758.5453
+	return (n - floor(n)) * 2.0 - 1.0
+
+func create_sound(sound_name: String, duration: float) -> AudioStreamWAV:
+	var rate := 22050
+	var count := int(duration * rate)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	for i in count:
+		var t := float(i) / float(rate)
+		var x := t / duration
+		var env := pow(maxf(0.0, 1.0 - x), 1.7)
+		var noise := sound_noise(i, sound_name.hash())
+		var sample := 0.0
+		match sound_name:
+			"arrow":
+				var freq := lerpf(1450.0, 430.0, x)
+				sample = sin(TAU * freq * t) * 0.38 * env + noise * 0.28 * env
+			"fireball":
+				var freq := lerpf(190.0, 72.0, x)
+				sample = sin(TAU * freq * t) * 0.48 * env + noise * 0.38 * env
+			"freeze":
+				var shimmer := sin(TAU * (1050.0 + 900.0 * x) * t) + sin(TAU * 1570.0 * t) * 0.55
+				sample = shimmer * 0.28 * env + noise * 0.12 * env
+			"enemy_down":
+				var freq := lerpf(210.0, 48.0, x)
+				sample = sin(TAU * freq * t) * 0.55 * env + noise * 0.25 * env
+			"enemy_attack":
+				sample = (sin(TAU * 105.0 * t) * 0.58 + noise * 0.48) * pow(maxf(0.0, 1.0 - x), 3.0)
+			"build":
+				var hit_a := exp(-t * 48.0)
+				var hit_b := exp(-maxf(0.0, t - 0.16) * 48.0) if t >= 0.16 else 0.0
+				sample = (sin(TAU * 310.0 * t) + noise * 0.65) * (hit_a + hit_b) * 0.45
+			"coin_gain":
+				var freq := 880.0 if t < 0.11 else 1320.0
+				sample = (sin(TAU * freq * t) + sin(TAU * freq * 2.0 * t) * 0.25) * 0.42 * env
+			"coin_spend":
+				var freq := lerpf(1050.0, 460.0, x)
+				sample = sin(TAU * freq * t) * 0.42 * env
+			"barrier_break":
+				var crack := 1.0 if t < 0.07 or (t > 0.16 and t < 0.23) else 0.25
+				sample = (noise * 0.58 * crack + sin(TAU * 62.0 * t) * 0.42) * env
+		bytes.encode_s16(i * 2, int(clampf(sample, -1.0, 1.0) * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.data = bytes
+	return stream
+
+func play_sfx(sound_name: String, pitch: float = 1.0) -> void:
+	if not sfx_streams.has(sound_name) or sfx_players.is_empty(): return
+	var player := sfx_players[sfx_player_index]
+	sfx_player_index = (sfx_player_index + 1) % sfx_players.size()
+	player.stop()
+	player.stream = sfx_streams[sound_name]
+	player.pitch_scale = pitch
+	player.play()
 
 func randomize_map() -> void:
 	active_path.clear()
@@ -125,6 +199,7 @@ func _process(delta: float) -> void:
 			victory = true; game_over = true; banner = localize("KINGDOM SAVED!", "王国守住了！"); banner_time = 999.0
 		else:
 			gold += 35 + wave * 4
+			play_sfx("coin_gain")
 			banner = localize("Wave cleared! Bonus gold awarded", "波次完成！已获得额外金币")
 			banner_time = 3.0
 	queue_redraw()
@@ -161,7 +236,7 @@ func update_enemies(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
 		if e.hp <= 0:
-			gold += e.reward; score += e.reward * 10; enemies.remove_at(i); continue
+			gold += e.reward; score += e.reward * 10; play_sfx("enemy_down", 0.72 if e.boss else 1.0); play_sfx("coin_gain", 1.15); enemies.remove_at(i); continue
 		e.flash = max(0.0, e.flash - delta)
 		e.slow = max(0.0, e.slow - delta)
 		e.attack_cd = max(0.0, e.attack_cd - delta)
@@ -171,6 +246,7 @@ func update_enemies(delta: float) -> void:
 				barriers[blocking_barrier].hp -= e.attack_damage
 				barriers[blocking_barrier].flash = 0.12
 				e.attack_cd = 1.0
+				play_sfx("enemy_attack", 0.78 if e.boss else 1.0)
 			continue
 		var target: Vector2 = active_path[e.seg + 1]
 		var speed: float = e.speed * (0.55 if e.slow > 0 else 1.0)
@@ -194,6 +270,7 @@ func update_barriers() -> void:
 	for i in range(barriers.size() - 1, -1, -1):
 		barriers[i].flash = max(0.0, barriers[i].flash - get_process_delta_time())
 		if barriers[i].hp <= 0.0:
+			play_sfx("barrier_break")
 			barriers.remove_at(i)
 			banner = localize("Barricade destroyed!", "路障被摧毁了！")
 			banner_time = 2.0
@@ -205,6 +282,7 @@ func update_towers(delta: float) -> void:
 				t.income_timer -= delta
 				if t.income_timer <= 0.0:
 					gold += 10
+					play_sfx("coin_gain", 1.2)
 					t.income_timer += 3.0
 					shots.append({"from":t.pos,"to":t.pos-Vector2(0,38),"life":0.35,"color":TOWER_COLORS[5]})
 			continue
@@ -223,6 +301,7 @@ func update_towers(delta: float) -> void:
 			enemies[best].hp -= damage
 			enemies[best].flash = 0.1
 			if t.type == 2: enemies[best].slow = 1.4
+			play_sfx(["arrow", "fireball", "freeze"][t.type])
 			t.cool = [0.62, 1.25, 0.42][t.type] / (1.0 + (t.level - 1) * 0.18)
 
 func update_shots(delta: float) -> void:
@@ -235,9 +314,11 @@ func build_at(index: int) -> void:
 	var cost: int = TOWER_COSTS[selected_type]
 	if gold < cost: banner = localize("Not enough gold", "金币不足"); banner_time = 2.0; return
 	gold -= cost
+	play_sfx("coin_spend")
 	var tower_range: float = 0.0 if selected_type == 5 else [210.0,185.0,200.0][selected_type]
 	towers.append({"spot":index,"pos":active_build_spots[index],"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0})
 	selected_tower = towers.size()-1
+	play_sfx("build")
 	banner = localize("%s tower built", "已建造%s") % tower_name(selected_type)
 	banner_time = 2.0
 
@@ -249,7 +330,9 @@ func build_barrier(pos: Vector2, segment: int) -> void:
 	if pos.distance_to(active_path[0]) < 80.0 or pos.distance_to(active_path[-1]) < 100.0:
 		banner = "Cannot block the entrance or castle gate"; banner_time = 2.0; return
 	gold -= cost
+	play_sfx("coin_spend")
 	barriers.append({"pos":pos,"seg":segment,"hp":BARRIER_MAX_HP,"max_hp":BARRIER_MAX_HP,"flash":0.0,"spent":cost})
+	play_sfx("build")
 	banner = localize("Barricade placed: 800 HP", "路障已放置：800 点生命")
 	banner_time = 2.0
 
@@ -265,7 +348,9 @@ func build_foundation(pos: Vector2) -> void:
 		if spot.distance_to(pos) < 70.0: banner = "Too close to an existing build pad"; banner_time = 2.0; return
 	if gold < TOWER_COSTS[4]: banner = localize("Not enough gold", "金币不足"); banner_time = 2.0; return
 	gold -= TOWER_COSTS[4]
+	play_sfx("coin_spend")
 	foundations.append({"pos":pos,"occupied":false})
+	play_sfx("build")
 	banner = localize("Foundation built — choose a tower", "地基建造完成——请选择塔")
 	banner_time = 2.0
 
@@ -275,10 +360,12 @@ func build_on_foundation(index: int) -> void:
 	var cost: int = TOWER_COSTS[selected_type]
 	if gold < cost: banner = localize("Not enough gold", "金币不足"); banner_time = 2.0; return
 	gold -= cost
+	play_sfx("coin_spend")
 	var tower_range: float = 0.0 if selected_type == 5 else [210.0,185.0,200.0][selected_type]
 	towers.append({"spot":-1,"foundation":index,"pos":foundations[index].pos,"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0})
 	foundations[index].occupied = true
 	selected_tower = towers.size() - 1
+	play_sfx("build")
 	banner = localize("%s built on foundation", "%s已建在地基上") % tower_name(selected_type)
 	banner_time = 2.0
 
@@ -386,12 +473,14 @@ func upgrade_selected() -> void:
 	var cost: int = 55 * t.level
 	if gold < cost: banner=localize("Not enough gold", "金币不足"); banner_time=2.0; return
 	gold -= cost; t.spent += cost; t.level += 1; t.range += 20.0
+	play_sfx("coin_spend"); play_sfx("build", 1.15)
 
 func sell_selected() -> void:
 	if selected_tower < 0 or selected_tower >= towers.size(): return
 	if towers[selected_tower].has("foundation") and towers[selected_tower].foundation >= 0:
 		foundations[towers[selected_tower].foundation].occupied = false
 	gold += int(towers[selected_tower].spent * 0.7)
+	play_sfx("coin_gain")
 	towers.remove_at(selected_tower); selected_tower = -1
 
 func restart_game() -> void:
