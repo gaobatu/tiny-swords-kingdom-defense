@@ -93,6 +93,10 @@ func setup_background_music() -> void:
 	music_player.volume_db = -16.0
 	music_player.stream = create_harmonica_music()
 	music_player.stream = create_harmonica_music_v2()
+	var recorded_harmonica := load("res://audio/lynnwood_riff_harmonica.mp3")
+	if recorded_harmonica is AudioStreamMP3:
+		recorded_harmonica.loop = true
+		music_player.stream = recorded_harmonica
 	add_child(music_player)
 	music_player.play()
 
