@@ -92,8 +92,60 @@ func setup_background_music() -> void:
 	music_player = AudioStreamPlayer.new()
 	music_player.volume_db = -16.0
 	music_player.stream = create_harmonica_music()
+	music_player.stream = create_harmonica_music_v2()
 	add_child(music_player)
 	music_player.play()
+
+func create_harmonica_music_v2() -> AudioStreamWAV:
+	var rate := 22050
+	var step := 0.36
+	# G major pentatonic melody: zero values create natural breathing spaces.
+	var melody := [
+		67,69,71,74, 71,69,67,0, 64,67,69,71, 69,67,64,0,
+		67,69,71,74, 76,74,71,69, 67,69,71,67, 64,62,64,0,
+		71,74,76,79, 76,74,71,0, 69,71,74,76, 74,71,69,0,
+		67,69,71,74, 71,69,67,64, 62,64,67,69, 67,64,62,0
+	]
+	var bass_notes := [43,40,36,38, 43,40,38,43, 40,43,36,38, 43,40,38,43]
+	var duration := melody.size() * step
+	var count := int(duration * rate)
+	var bytes := PackedByteArray()
+	bytes.resize(count * 2)
+	for i in count:
+		var t := float(i) / float(rate)
+		var note_index := mini(int(t / step), melody.size() - 1)
+		var local_t := fmod(t, step)
+		var sample := 0.0
+		var note: int = melody[note_index]
+		if note > 0:
+			var attack := minf(1.0, local_t / 0.07)
+			var release := minf(1.0, (step - local_t) / 0.085)
+			var breath_env := attack * release
+			var bend := -0.018 * exp(-local_t * 18.0)
+			var vibrato_depth := minf(1.0, local_t * 5.0) * 0.008
+			var vibrato := sin(TAU * 5.1 * t) * vibrato_depth
+			var freq := midi_frequency(note) * (1.0 + bend + vibrato)
+			var reed := sin(TAU * freq * t) * 0.62
+			reed += sin(TAU * freq * 2.0 * t + 0.18) * 0.23
+			reed += sin(TAU * freq * 3.0 * t + 0.35) * 0.105
+			reed += sin(TAU * freq * 4.0 * t) * 0.04
+			var breath := sound_noise(i, 991 + note_index) * (0.028 + attack * 0.018)
+			sample += (reed * 0.62 + breath) * breath_env
+		var bass_index := mini(int(t / (step * 4.0)), bass_notes.size() - 1)
+		var bass_freq := midi_frequency(bass_notes[bass_index])
+		var bass_pulse := exp(-fmod(t, step * 2.0) * 4.4)
+		sample += sin(TAU * bass_freq * t) * 0.1 * (0.55 + bass_pulse * 0.45)
+		sample += sin(TAU * bass_freq * 1.5 * t) * 0.025
+		bytes.encode_s16(i * 2, int(clampf(sample, -0.94, 0.94) * 32767.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = count
+	stream.data = bytes
+	return stream
 
 func midi_frequency(note: int) -> float:
 	return 440.0 * pow(2.0, (float(note) - 69.0) / 12.0)
