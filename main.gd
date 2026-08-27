@@ -17,6 +17,7 @@ const BOSS_HP := FIRST_WAVE_SOLDIER_HP * 50.0
 const BOSS_ATTACK := 100.0
 const PATH := [Vector2(-30, 120), Vector2(210, 120), Vector2(210, 300), Vector2(470, 300), Vector2(470, 120), Vector2(760, 120), Vector2(760, 500), Vector2(930, 500), Vector2(1030, 500)]
 const BUILD_SPOTS := [Vector2(120,220),Vector2(335,190),Vector2(340,390),Vector2(570,220),Vector2(650,390),Vector2(860,270),Vector2(880,610)]
+const UI_FONT: Font = preload("res://fonts/NotoSansSC-Variable.ttf")
 
 var gold := 240
 var lives := 20
@@ -650,7 +651,7 @@ func _draw() -> void:
 		if i == hover_spot: col = Color("#fff3b0")
 		draw_circle(active_build_spots[i],38,col, true)
 		draw_arc(active_build_spots[i],38,0,TAU,32,Color("#ffffff88"),3)
-		if free: draw_string(ThemeDB.fallback_font,active_build_spots[i]+Vector2(-10,8),"+",HORIZONTAL_ALIGNMENT_LEFT,20,28,Color("#6b7d3d"))
+		if free: draw_string(UI_FONT,active_build_spots[i]+Vector2(-10,8),"+",HORIZONTAL_ALIGNMENT_LEFT,20,28,Color("#6b7d3d"))
 	# towers and ranges
 	for f in foundations: draw_foundation(f)
 	if selected_tower >= 0 and selected_tower < towers.size():
@@ -663,15 +664,15 @@ func _draw() -> void:
 	# panel
 	draw_rect(Rect2(PANEL_X,0,W-PANEL_X,H),Color("#17212b"))
 	draw_rect(Rect2(PANEL_X+10,10,260,700),Color("#22313f"),true)
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+28,48),localize("KINGDOM DEFENSE", "王国塔防"),HORIZONTAL_ALIGNMENT_LEFT,-1,26,Color("#f8d56b"))
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+28,88),localize("Gold  %d", "金币  %d")%gold,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ffd166"))
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+145,88),localize("Lives  %d", "生命  %d")%lives,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ef6f6c"))
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+28,122),localize("Wave  %d/10    Score  %d", "波次  %d/10    分数  %d")%[wave,score],HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color.WHITE)
+	draw_string(UI_FONT,Vector2(PANEL_X+28,48),localize("KINGDOM DEFENSE", "王国塔防"),HORIZONTAL_ALIGNMENT_LEFT,-1,26,Color("#f8d56b"))
+	draw_string(UI_FONT,Vector2(PANEL_X+28,88),localize("Gold  %d", "金币  %d")%gold,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ffd166"))
+	draw_string(UI_FONT,Vector2(PANEL_X+145,88),localize("Lives  %d", "生命  %d")%lives,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ef6f6c"))
+	draw_string(UI_FONT,Vector2(PANEL_X+28,122),localize("Wave  %d/10    Score  %d", "波次  %d/10    分数  %d")%[wave,score],HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color.WHITE)
 	for i in 6: draw_tower_button(i)
 	draw_button(Rect2(PANEL_X+24,420,232,58),localize("WAVE IN PROGRESS", "波次进行中") if wave_active else localize("START NEXT WAVE", "开始下一波"),Color("#4f9d69") if not wave_active else Color("#52616b"))
 	if selected_tower >= 0 and selected_tower < towers.size():
 		var t := towers[selected_tower]
-		draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+28,500),"%s  %s%d"%[tower_name(t.type),localize("Lv.", "等级 "),t.level],HORIZONTAL_ALIGNMENT_LEFT,-1,20,TOWER_COLORS[t.type])
+		draw_string(UI_FONT,Vector2(PANEL_X+28,500),"%s  %s%d"%[tower_name(t.type),localize("Lv.", "等级 "),t.level],HORIZONTAL_ALIGNMENT_LEFT,-1,20,TOWER_COLORS[t.type])
 		draw_button(Rect2(PANEL_X+24,510,110,48),localize("UPGRADE", "升级"),Color("#3d7ea6")); draw_button(Rect2(PANEL_X+146,510,110,48),localize("SELL", "出售"),Color("#a35d5d"))
 	draw_button(Rect2(PANEL_X+176,565,80,30),"中文" if not chinese else "EN",Color("#596f82"))
 	draw_button(Rect2(PANEL_X+24,565,142,30),localize("MODE: ", "难度：")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")))
@@ -679,16 +680,16 @@ func _draw() -> void:
 		var stage_labels := [localize("1 GRASS", "1 草原"),localize("2 FLAME", "2 火焰"),localize("3 ICE", "3 冰冻")]
 		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa")]
 		draw_button(Rect2(PANEL_X+24+stage_index*78,602,72,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,654),localize("Stage effect: ", "关卡效果：")+stage_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("#f8d56b"))
+	draw_string(UI_FONT,Vector2(PANEL_X+26,654),localize("Stage effect: ", "关卡效果：")+stage_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("#f8d56b"))
 	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%")][stage]
-	draw_multiline_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,678),effect_text,HORIZONTAL_ALIGNMENT_LEFT,220,16,17,Color("#c9d6df"))
+	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,678),effect_text,HORIZONTAL_ALIGNMENT_LEFT,220,16,17,Color("#c9d6df"))
 	if banner_time > 0:
 		draw_rect(Rect2(210,22,580,48),Color(0.05,0.08,0.12,0.88),true)
-		draw_string(ThemeDB.fallback_font,Vector2(210,54),banner,HORIZONTAL_ALIGNMENT_CENTER,580,21,Color.WHITE)
+		draw_string(UI_FONT,Vector2(210,54),banner,HORIZONTAL_ALIGNMENT_CENTER,580,21,Color.WHITE)
 	if game_over:
 		draw_rect(Rect2(0,0,W,H),Color(0.03,0.04,0.07,0.72),true)
-		draw_string(ThemeDB.fallback_font,Vector2(0,300),banner,HORIZONTAL_ALIGNMENT_CENTER,W,42,Color("#f8d56b") if victory else Color("#ef6f6c"))
-		draw_string(ThemeDB.fallback_font,Vector2(0,350),localize("Final score: %d", "最终分数：%d")%score,HORIZONTAL_ALIGNMENT_CENTER,W,24,Color.WHITE)
+		draw_string(UI_FONT,Vector2(0,300),banner,HORIZONTAL_ALIGNMENT_CENTER,W,42,Color("#f8d56b") if victory else Color("#ef6f6c"))
+		draw_string(UI_FONT,Vector2(0,350),localize("Final score: %d", "最终分数：%d")%score,HORIZONTAL_ALIGNMENT_CENTER,W,24,Color.WHITE)
 		draw_button(Rect2(1080,625,170,55),localize("PLAY AGAIN", "再玩一次"),Color("#4f9d69"))
 
 func draw_tree(pos: Vector2) -> void:
@@ -708,9 +709,9 @@ func draw_tower(t: Dictionary, selected: bool) -> void:
 	if tex: draw_texture_rect_region(tex,Rect2(t.pos-Vector2(48,62),Vector2(96,96)),Rect2(0,0,min(192,tex.get_width()),min(192,tex.get_height())))
 	draw_tower_upgrade_details(t)
 	draw_circle(t.pos+Vector2(0,35),13,TOWER_COLORS[t.type])
-	draw_string(ThemeDB.fallback_font,t.pos+Vector2(-8,41),str(t.level),HORIZONTAL_ALIGNMENT_CENTER,16,15,Color("#17212b"))
+	draw_string(UI_FONT,t.pos+Vector2(-8,41),str(t.level),HORIZONTAL_ALIGNMENT_CENTER,16,15,Color("#17212b"))
 	if t.type == 5:
-		draw_string(ThemeDB.fallback_font,t.pos+Vector2(-22,-55),"+10",HORIZONTAL_ALIGNMENT_CENTER,44,16,Color("#ffe066"))
+		draw_string(UI_FONT,t.pos+Vector2(-22,-55),"+10",HORIZONTAL_ALIGNMENT_CENTER,44,16,Color("#ffe066"))
 
 func draw_tower_upgrade_details(t: Dictionary) -> void:
 	if t.level < 2 or t.type == 5: return
@@ -745,7 +746,7 @@ func draw_foundation(f: Dictionary) -> void:
 	draw_circle(f.pos, 35, Color("#b7a27b"))
 	draw_arc(f.pos,35,0,TAU,20,Color("#e6d5b8"),3)
 	if not f.occupied:
-		draw_string(ThemeDB.fallback_font,f.pos+Vector2(-12,9),"+",HORIZONTAL_ALIGNMENT_CENTER,24,28,Color("#4a403a"))
+		draw_string(UI_FONT,f.pos+Vector2(-12,9),"+",HORIZONTAL_ALIGNMENT_CENTER,24,28,Color("#4a403a"))
 
 func draw_enemy(e: Dictionary) -> void:
 	var tint := Color.WHITE if e.flash <= 0 else Color("#fff3b0")
@@ -759,7 +760,7 @@ func draw_enemy(e: Dictionary) -> void:
 	draw_rect(Rect2(e.pos+Vector2(-bar_width/2.0,bar_y),Vector2(bar_width,8 if e.boss else 6)),Color("#321f28"),true)
 	draw_rect(Rect2(e.pos+Vector2(-bar_width/2.0,bar_y),Vector2(bar_width*ratio,8 if e.boss else 6)),Color("#d62828") if e.boss else (Color("#67c56b") if ratio>.35 else Color("#ef6f6c")),true)
 	if e.boss:
-		draw_string(ThemeDB.fallback_font,e.pos+Vector2(-45,-66),"BOSS  %d HP" % ceil(e.hp),HORIZONTAL_ALIGNMENT_CENTER,90,15,Color("#ffd166"))
+		draw_string(UI_FONT,e.pos+Vector2(-45,-66),"BOSS  %d HP" % ceil(e.hp),HORIZONTAL_ALIGNMENT_CENTER,90,15,Color("#ffd166"))
 	if e.slow > 0: draw_arc(e.pos,24,0,TAU,24,Color("#73d2de"),2)
 
 func draw_barrier(b: Dictionary) -> void:
@@ -777,7 +778,7 @@ func draw_barrier(b: Dictionary) -> void:
 	var ratio: float = max(0.0,b.hp/b.max_hp)
 	draw_rect(Rect2(b.pos+Vector2(-36,-48),Vector2(72,8)),Color("#321f28"),true)
 	draw_rect(Rect2(b.pos+Vector2(-36,-48),Vector2(72*ratio,8)),Color("#67c56b") if ratio>.35 else Color("#ef6f6c"),true)
-	draw_string(ThemeDB.fallback_font,b.pos+Vector2(-25,52),"%d" % ceil(b.hp),HORIZONTAL_ALIGNMENT_CENTER,50,13,Color.WHITE)
+	draw_string(UI_FONT,b.pos+Vector2(-25,52),"%d" % ceil(b.hp),HORIZONTAL_ALIGNMENT_CENTER,50,13,Color.WHITE)
 
 func draw_tower_button(i: int) -> void:
 	var r := Rect2(PANEL_X+24,135+i*46,232,40)
@@ -785,8 +786,8 @@ func draw_tower_button(i: int) -> void:
 	draw_rect(r,TOWER_COLORS[i],false,3)
 	draw_circle(r.position+Vector2(25,20),13,TOWER_COLORS[i])
 	draw_shop_icon(i, r.position + Vector2(25,20))
-	draw_string(ThemeDB.fallback_font,r.position+Vector2(47,18),tower_name(i),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
-	draw_string(ThemeDB.fallback_font,r.position+Vector2(158,25),"%d G"%TOWER_COSTS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#ffd166"))
+	draw_string(UI_FONT,r.position+Vector2(47,18),tower_name(i),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
+	draw_string(UI_FONT,r.position+Vector2(158,25),"%d G"%TOWER_COSTS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#ffd166"))
 
 func draw_shop_icon(type: int, center: Vector2) -> void:
 	if type in [0,1,2,5]:
@@ -795,7 +796,7 @@ func draw_shop_icon(type: int, center: Vector2) -> void:
 			draw_texture_rect_region(tex,Rect2(center-Vector2(15,18),Vector2(30,30)),Rect2(0,0,min(192,tex.get_width()),min(192,tex.get_height())))
 		if type == 5:
 			draw_circle(center+Vector2(8,-8),6,Color("#f9c74f"))
-			draw_string(ThemeDB.fallback_font,center+Vector2(4,-4),"$",HORIZONTAL_ALIGNMENT_CENTER,8,10,Color("#5c4612"))
+			draw_string(UI_FONT,center+Vector2(4,-4),"$",HORIZONTAL_ALIGNMENT_CENTER,8,10,Color("#5c4612"))
 	elif type == 3:
 		draw_line(center+Vector2(-9,-7),center+Vector2(9,7),Color("#4a2f1b"),5,true)
 		draw_line(center+Vector2(-9,7),center+Vector2(9,-7),Color("#e0b27a"),5,true)
@@ -803,8 +804,8 @@ func draw_shop_icon(type: int, center: Vector2) -> void:
 	else:
 		draw_rect(Rect2(center-Vector2(10,7),Vector2(20,14)),Color("#6c584c"),true)
 		draw_rect(Rect2(center-Vector2(8,5),Vector2(16,10)),Color("#d6c7a1"),true)
-		draw_string(ThemeDB.fallback_font,center+Vector2(-6,5),"+",HORIZONTAL_ALIGNMENT_CENTER,12,12,Color("#4a403a"))
+		draw_string(UI_FONT,center+Vector2(-6,5),"+",HORIZONTAL_ALIGNMENT_CENTER,12,12,Color("#4a403a"))
 
 func draw_button(r: Rect2, text: String, color: Color) -> void:
 	draw_rect(r,color,true); draw_rect(r,Color(1,1,1,0.2),false,2)
-	draw_string(ThemeDB.fallback_font,r.position+Vector2(0,r.size.y/2+7),text,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,Color.WHITE)
+	draw_string(UI_FONT,r.position+Vector2(0,r.size.y/2+7),text,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,Color.WHITE)
