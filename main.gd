@@ -10,6 +10,7 @@ const TOWER_COSTS := [70, 100, 130, 80, 100, 120]
 const TOWER_NAMES := ["Archer", "Cannon", "Frost", "Barricade", "Foundation", "Gold Mine"]
 const TOWER_COLORS := [Color("#ffd166"), Color("#ef8354"), Color("#73d2de"), Color("#b08968"), Color("#d6c7a1"), Color("#f4c542")]
 const BARRIER_MAX_HP := 800.0
+const BARRIER_SIZE := 72.0
 const ENEMY_BASE_ATTACK := 20.0
 const FIRST_WAVE_SOLDIER_HP := 80.0
 const BOSS_HP := FIRST_WAVE_SOLDIER_HP * 50.0
@@ -382,7 +383,7 @@ func update_enemies(delta: float) -> void:
 func barrier_blocking_enemy(e: Dictionary) -> int:
 	for i in barriers.size():
 		var b := barriers[i]
-		if b.seg == e.seg and e.pos.distance_to(b.pos) <= 34.0:
+		if b.seg == e.seg and e.pos.distance_to(b.pos) <= BARRIER_SIZE * 0.55:
 			return i
 	return -1
 
@@ -730,15 +731,20 @@ func draw_enemy(e: Dictionary) -> void:
 
 func draw_barrier(b: Dictionary) -> void:
 	var color := Color("#f6d7b0") if b.flash > 0.0 else Color("#8b5e3c")
-	draw_rect(Rect2(b.pos - Vector2(28,18),Vector2(56,36)),Color("#523522"),true)
-	for offset in [-18.0, 0.0, 18.0]:
-		draw_line(b.pos+Vector2(offset-9,-15),b.pos+Vector2(offset+9,15),color,8,true)
-	draw_line(b.pos+Vector2(-29,-17),b.pos+Vector2(29,-17),Color("#d7a86e"),5,true)
-	draw_line(b.pos+Vector2(-29,17),b.pos+Vector2(29,17),Color("#d7a86e"),5,true)
+	var half := BARRIER_SIZE * 0.5
+	draw_rect(Rect2(b.pos-Vector2(half,half),Vector2(BARRIER_SIZE,BARRIER_SIZE)),Color("#3f291d"),true)
+	for offset in [-27.0,-9.0,9.0,27.0]:
+		draw_rect(Rect2(b.pos+Vector2(offset-7.0,-32.0),Vector2(14.0,64.0)),color,true)
+		draw_line(b.pos+Vector2(offset-6.0,-30.0),b.pos+Vector2(offset-6.0,30.0),Color("#d7a86e88"),2,true)
+	draw_line(b.pos+Vector2(-32,-27),b.pos+Vector2(32,27),Color("#5a3824"),7,true)
+	draw_line(b.pos+Vector2(-32,27),b.pos+Vector2(32,-27),Color("#d7a86e"),7,true)
+	draw_rect(Rect2(b.pos-Vector2(half,half),Vector2(BARRIER_SIZE,BARRIER_SIZE)),Color("#e2b879"),false,4)
+	for corner in [Vector2(-29,-29),Vector2(29,-29),Vector2(-29,29),Vector2(29,29)]:
+		draw_circle(b.pos+corner,3.5,Color("#2d2119"))
 	var ratio: float = max(0.0,b.hp/b.max_hp)
-	draw_rect(Rect2(b.pos+Vector2(-32,-29),Vector2(64,7)),Color("#321f28"),true)
-	draw_rect(Rect2(b.pos+Vector2(-32,-29),Vector2(64*ratio,7)),Color("#67c56b") if ratio>.35 else Color("#ef6f6c"),true)
-	draw_string(ThemeDB.fallback_font,b.pos+Vector2(-25,35),"%d" % ceil(b.hp),HORIZONTAL_ALIGNMENT_CENTER,50,13,Color.WHITE)
+	draw_rect(Rect2(b.pos+Vector2(-36,-48),Vector2(72,8)),Color("#321f28"),true)
+	draw_rect(Rect2(b.pos+Vector2(-36,-48),Vector2(72*ratio,8)),Color("#67c56b") if ratio>.35 else Color("#ef6f6c"),true)
+	draw_string(ThemeDB.fallback_font,b.pos+Vector2(-25,52),"%d" % ceil(b.hp),HORIZONTAL_ALIGNMENT_CENTER,50,13,Color.WHITE)
 
 func draw_tower_button(i: int) -> void:
 	var r := Rect2(PANEL_X+24,135+i*46,232,40)
