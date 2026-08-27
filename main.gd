@@ -25,6 +25,7 @@ var selected_type := 0
 var selected_tower := -1
 var chinese := false
 var difficulty := 1 # 0 easy, 1 normal, 2 hard
+var stage := 0 # 0 grassland, 1 flame, 2 frozen
 var enemies: Array[Dictionary] = []
 var towers: Array[Dictionary] = []
 var barriers: Array[Dictionary] = []
@@ -67,8 +68,21 @@ func difficulty_name() -> String:
 	var chinese_names := ["简单", "普通", "困难"]
 	return chinese_names[difficulty] if chinese else english_names[difficulty]
 
+func stage_name() -> String:
+	var english_names := ["GRASS", "FLAME", "FROZEN"]
+	var chinese_names := ["草原", "火焰", "冰冻"]
+	return chinese_names[stage] if chinese else english_names[stage]
+
 func enemy_hp_multiplier() -> float:
-	return 0.5 if difficulty == 0 else 1.0
+	var multiplier := 0.5 if difficulty == 0 else 1.0
+	if stage == 2: multiplier *= 1.5
+	return multiplier
+
+func enemy_damage_multiplier() -> float:
+	return 1.5 if stage == 1 else 1.0
+
+func tower_cooldown_multiplier() -> float:
+	return 1.5 if stage == 2 else 1.0
 
 func boss_count_for_wave(current_wave: int) -> int:
 	if difficulty == 2:
@@ -296,7 +310,7 @@ func _process(delta: float) -> void:
 			spawn_left -= 1
 			spawn_timer = max(0.28, 0.78 - wave * 0.035)
 	update_enemies(delta)
-	update_barriers()
+	update_barriers(delta)
 	update_towers(delta)
 	update_shots(delta)
 	if wave_active and spawn_left == 0 and enemies.is_empty():
@@ -328,7 +342,7 @@ func spawn_enemy() -> void:
 		boss_spawned_this_wave = true
 		bosses_spawned_this_wave += 1
 		var boss_hp := BOSS_HP * enemy_hp_multiplier()
-		enemies.append({"pos":active_path[0],"seg":0,"hp":boss_hp,"max_hp":boss_hp,"speed":42.0,"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK})
+		enemies.append({"pos":active_path[0],"seg":0,"hp":boss_hp,"max_hp":boss_hp,"speed":42.0,"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK * enemy_damage_multiplier()})
 		banner = localize("BOSS INCOMING — %d HP!", "BOSS 来袭——%d 点生命！") % int(boss_hp)
 		banner_time = 3.0
 		return
@@ -336,7 +350,7 @@ func spawn_enemy() -> void:
 	var fast := wave % 3 == 0 and spawn_left % 3 == 0
 	var tank := wave >= 4 and spawn_left % 5 == 0
 	if tank: hp *= 2.3
-	enemies.append({"pos":active_path[0],"seg":0,"hp":hp,"max_hp":hp,"speed": (125.0 if fast else (54.0 if tank else 78.0)) + wave * 2.0,"slow":0.0,"reward":(20 if tank else 11) + wave,"tank":tank,"boss":false,"flash":0.0,"attack_cd":0.0,"attack_damage":ENEMY_BASE_ATTACK + max(0, wave - 1) * 10.0})
+	enemies.append({"pos":active_path[0],"seg":0,"hp":hp,"max_hp":hp,"speed": (125.0 if fast else (54.0 if tank else 78.0)) + wave * 2.0,"slow":0.0,"reward":(20 if tank else 11) + wave,"tank":tank,"boss":false,"flash":0.0,"attack_cd":0.0,"attack_damage":(ENEMY_BASE_ATTACK + max(0, wave - 1) * 10.0) * enemy_damage_multiplier()})
 
 func update_enemies(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
@@ -372,9 +386,11 @@ func barrier_blocking_enemy(e: Dictionary) -> int:
 			return i
 	return -1
 
-func update_barriers() -> void:
+func update_barriers(delta: float) -> void:
 	for i in range(barriers.size() - 1, -1, -1):
-		barriers[i].flash = max(0.0, barriers[i].flash - get_process_delta_time())
+		barriers[i].flash = max(0.0, barriers[i].flash - delta)
+		if stage == 1 and wave_active:
+			barriers[i].hp -= 10.0 * delta
 		if barriers[i].hp <= 0.0:
 			play_sfx("barrier_break")
 			barriers.remove_at(i)
@@ -408,7 +424,7 @@ func update_towers(delta: float) -> void:
 			enemies[best].flash = 0.1
 			if t.type == 2: enemies[best].slow = 1.4
 			play_sfx(["arrow", "fireball", "freeze"][t.type])
-			t.cool = [0.62, 1.25, 0.42][t.type] / (1.0 + (t.level - 1) * 0.18)
+			t.cool = ([0.62, 1.25, 0.42][t.type] / (1.0 + (t.level - 1) * 0.18)) * tower_cooldown_multiplier()
 
 func update_shots(delta: float) -> void:
 	for i in range(shots.size()-1,-1,-1):
@@ -512,6 +528,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				banner = localize("Difficulty: %s", "难度：%s") % difficulty_name()
 			banner_time = 2.0
 			return
+		for stage_index in 3:
+			if Rect2(PANEL_X+24+stage_index*78,602,72,30).has_point(p):
+				if wave > 0 or wave_active:
+					banner = localize("Stage can only change before wave 1", "只能在第一波开始前更换关卡")
+				else:
+					stage = stage_index
+					restart_game()
+					banner = localize("Stage %d: %s — random map", "第%d关：%s——随机地图") % [stage + 1, stage_name()]
+				banner_time = 2.5
+				return
 		var clicked_tower := nearest_tower(world_p, 48.0)
 		if clicked_tower >= 0:
 			selected_tower = clicked_tower
@@ -594,15 +620,22 @@ func restart_game() -> void:
 
 func _draw() -> void:
 	# World
-	draw_rect(Rect2(0,0,WORLD_W,WORLD_H), Color("#80b85a"))
+	var world_color: Color = [Color("#80b85a"), Color("#8f3f2f"), Color("#8fc4d6")][stage]
+	draw_rect(Rect2(0,0,WORLD_W,WORLD_H), world_color)
 	for x in range(0,int(WORLD_W),64):
 		for y in range(0,int(WORLD_H),64):
 			if (x/64 + y/64 as int) % 2 == 0: draw_rect(Rect2(x,y,64,64),Color(1,1,1,0.025))
+	if stage == 1:
+		for flame_pos in [Vector2(90,90),Vector2(300,180),Vector2(620,80),Vector2(840,330),Vector2(460,610),Vector2(920,600)]:
+			draw_circle(flame_pos,18,Color("#ff8c42aa")); draw_circle(flame_pos-Vector2(0,11),9,Color("#ffd166cc"))
+	elif stage == 2:
+		for crystal_pos in [Vector2(80,100),Vector2(290,170),Vector2(610,75),Vector2(850,320),Vector2(450,610),Vector2(920,590)]:
+			draw_colored_polygon(PackedVector2Array([crystal_pos+Vector2(0,-20),crystal_pos+Vector2(13,12),crystal_pos+Vector2(-13,12)]),Color("#d9f3ffbb"))
 	# River and path
-	draw_rect(Rect2(0,WORLD_H-70,WORLD_W,70),Color("#4fa4c4"))
+	draw_rect(Rect2(0,WORLD_H-70,WORLD_W,70),[Color("#4fa4c4"),Color("#d64b2a"),Color("#cceeff")][stage])
 	for i in active_path.size()-1:
-		draw_line(active_path[i],active_path[i+1],Color("#c6a66b"),PATH_WIDTH,true)
-		draw_line(active_path[i],active_path[i+1],Color("#dfc184"),PATH_WIDTH-14,true)
+		draw_line(active_path[i],active_path[i+1],[Color("#c6a66b"),Color("#4d2925"),Color("#9bb7c5")][stage],PATH_WIDTH,true)
+		draw_line(active_path[i],active_path[i+1],[Color("#dfc184"),Color("#6f3b30"),Color("#d8edf4")][stage],PATH_WIDTH-14,true)
 	if selected_type == 3 and path_hover_valid:
 		draw_circle(hover_path, 30, Color(0.69,0.54,0.41,0.35))
 		draw_arc(hover_path,30,0,TAU,24,Color("#ffe0b2"),3)
@@ -641,8 +674,13 @@ func _draw() -> void:
 		draw_button(Rect2(PANEL_X+24,510,110,48),localize("UPGRADE", "升级"),Color("#3d7ea6")); draw_button(Rect2(PANEL_X+146,510,110,48),localize("SELL", "出售"),Color("#a35d5d"))
 	draw_button(Rect2(PANEL_X+176,565,80,30),"中文" if not chinese else "EN",Color("#596f82"))
 	draw_button(Rect2(PANEL_X+24,565,142,30),localize("MODE: ", "难度：")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")))
-	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,604),localize("Tips", "提示"),HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color("#f8d56b"))
-	draw_multiline_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,630),localize("Foundation: anywhere off-road\nMine: +10 gold / 3 sec\nIncome only during waves", "地基：可建在泥路外\n矿塔：每3秒获得10金币\n仅在波次中产生收益"),HORIZONTAL_ALIGNMENT_LEFT,220,16,18,Color("#c9d6df"))
+	for stage_index in 3:
+		var stage_labels := [localize("1 GRASS", "1 草原"),localize("2 FLAME", "2 火焰"),localize("3 ICE", "3 冰冻")]
+		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa")]
+		draw_button(Rect2(PANEL_X+24+stage_index*78,602,72,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
+	draw_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,654),localize("Stage effect: ", "关卡效果：")+stage_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("#f8d56b"))
+	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%")][stage]
+	draw_multiline_string(ThemeDB.fallback_font,Vector2(PANEL_X+26,678),effect_text,HORIZONTAL_ALIGNMENT_LEFT,220,16,17,Color("#c9d6df"))
 	if banner_time > 0:
 		draw_rect(Rect2(210,22,580,48),Color(0.05,0.08,0.12,0.88),true)
 		draw_string(ThemeDB.fallback_font,Vector2(210,54),banner,HORIZONTAL_ALIGNMENT_CENTER,580,21,Color.WHITE)
