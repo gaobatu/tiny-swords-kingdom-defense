@@ -701,11 +701,44 @@ func draw_castle(pos: Vector2) -> void:
 func draw_tower(t: Dictionary, selected: bool) -> void:
 	var tex: Texture2D = tower_tex if t.type == 5 else [archery_tex,barracks_tex,tower_tex][t.type]
 	if selected: draw_circle(t.pos,45,Color(1,1,1,0.25))
+	if t.level >= 2:
+		var platform_color: Color = Color("#f3c969") if t.level >= 3 else Color("#b8c7d1")
+		draw_circle(t.pos+Vector2(0,26),43,Color("#263847"))
+		draw_arc(t.pos+Vector2(0,26),43,0,TAU,32,platform_color,5)
 	if tex: draw_texture_rect_region(tex,Rect2(t.pos-Vector2(48,62),Vector2(96,96)),Rect2(0,0,min(192,tex.get_width()),min(192,tex.get_height())))
+	draw_tower_upgrade_details(t)
 	draw_circle(t.pos+Vector2(0,35),13,TOWER_COLORS[t.type])
 	draw_string(ThemeDB.fallback_font,t.pos+Vector2(-8,41),str(t.level),HORIZONTAL_ALIGNMENT_CENTER,16,15,Color("#17212b"))
 	if t.type == 5:
 		draw_string(ThemeDB.fallback_font,t.pos+Vector2(-22,-55),"+10",HORIZONTAL_ALIGNMENT_CENTER,44,16,Color("#ffe066"))
+
+func draw_tower_upgrade_details(t: Dictionary) -> void:
+	if t.level < 2 or t.type == 5: return
+	var trim_color: Color = Color("#ffd166") if t.level >= 3 else Color("#d9e4ea")
+	# Reinforced roof trim and side armor make level 2 visibly stronger.
+	draw_line(t.pos+Vector2(-35,-34),t.pos+Vector2(35,-34),trim_color,5,true)
+	draw_line(t.pos+Vector2(-37,-29),t.pos+Vector2(-37,22),trim_color,4,true)
+	draw_line(t.pos+Vector2(37,-29),t.pos+Vector2(37,22),trim_color,4,true)
+	var flag_left: Vector2 = t.pos+Vector2(-34,-50)
+	draw_line(flag_left,flag_left+Vector2(0,24),Color("#44362f"),3,true)
+	draw_colored_polygon(PackedVector2Array([flag_left,flag_left+Vector2(17,5),flag_left+Vector2(0,11)]),TOWER_COLORS[t.type])
+	if t.level >= 3:
+		var flag_right: Vector2 = t.pos+Vector2(34,-50)
+		draw_line(flag_right,flag_right+Vector2(0,24),Color("#44362f"),3,true)
+		draw_colored_polygon(PackedVector2Array([flag_right,flag_right+Vector2(-17,5),flag_right+Vector2(0,11)]),TOWER_COLORS[t.type])
+		draw_circle(t.pos+Vector2(0,-39),14,Color(1.0,0.82,0.3,0.22))
+		draw_circle(t.pos+Vector2(0,-39),7,trim_color)
+		draw_colored_polygon(PackedVector2Array([t.pos+Vector2(-12,-55),t.pos+Vector2(-8,-68),t.pos+Vector2(0,-59),t.pos+Vector2(8,-68),t.pos+Vector2(12,-55)]),Color("#f8d56b"))
+		# Type-specific elite emblem.
+		if t.type == 0:
+			draw_line(t.pos+Vector2(-12,12),t.pos+Vector2(12,-10),Color("#fff0c2"),3,true)
+			draw_line(t.pos+Vector2(-9,9),t.pos+Vector2(15,12),Color("#6b4226"),2,true)
+		elif t.type == 1:
+			draw_circle(t.pos+Vector2(0,9),8,Color("#ef8354")); draw_arc(t.pos+Vector2(0,9),8,0,TAU,16,Color("#ffe0b2"),2)
+		elif t.type == 2:
+			for angle in 6:
+				var direction := Vector2.UP.rotated(float(angle) * TAU / 6.0)
+				draw_line(t.pos+Vector2(0,8),t.pos+Vector2(0,8)+direction*12.0,Color("#bff3ff"),3,true)
 
 func draw_foundation(f: Dictionary) -> void:
 	draw_circle(f.pos, 41, Color("#6c584c"))
