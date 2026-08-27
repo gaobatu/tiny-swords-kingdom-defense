@@ -57,6 +57,7 @@ var sfx_streams: Dictionary = {}
 var sfx_players: Array[AudioStreamPlayer] = []
 var sfx_player_index := 0
 var music_player: AudioStreamPlayer
+var last_touch_time_ms := -1000
 
 func localize(english: String, chinese_text: String) -> String:
 	return chinese_text if chinese else english
@@ -499,14 +500,30 @@ func occupied(spot: int) -> bool:
 	return false
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
-		var world_mouse: Vector2 = event.position
-		hover_spot = nearest_spot(world_mouse, 34.0)
-		var path_result := nearest_path_point(world_mouse)
+	if event is InputEventMouseMotion or event is InputEventScreenDrag:
+		var pointer_position: Vector2 = event.position
+		hover_spot = nearest_spot(pointer_position, 34.0)
+		var path_result := nearest_path_point(pointer_position)
 		hover_path = path_result.pos
 		path_hover_valid = path_result.distance <= PATH_WIDTH * 0.5
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var p: Vector2 = event.position
+	var pointer_pressed := false
+	var pressed_position := Vector2.ZERO
+	if event is InputEventScreenTouch:
+		last_touch_time_ms = Time.get_ticks_msec()
+		if event.pressed:
+			pointer_pressed = true
+			pressed_position = event.position
+			hover_spot = nearest_spot(pressed_position, 34.0)
+			var touch_path_result := nearest_path_point(pressed_position)
+			hover_path = touch_path_result.pos
+			path_hover_valid = touch_path_result.distance <= PATH_WIDTH * 0.5
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		# Browsers may synthesize a mouse click after a touch. Ignore that duplicate.
+		if Time.get_ticks_msec() - last_touch_time_ms > 500:
+			pointer_pressed = true
+			pressed_position = event.position
+	if pointer_pressed:
+		var p: Vector2 = pressed_position
 		var world_p: Vector2 = p
 		if game_over:
 			if Rect2(1080,625,170,55).has_point(p): restart_game()
