@@ -6,9 +6,9 @@ const PANEL_X := 1000.0
 const WORLD_W := 1280.0
 const WORLD_H := 720.0
 const PATH_WIDTH := 76.0
-const TOWER_COSTS := [70, 100, 130, 80, 100, 120]
-const TOWER_NAMES := ["Archer", "Cannon", "Frost", "Barricade", "Foundation", "Gold Mine"]
-const TOWER_COLORS := [Color("#ffd166"), Color("#ef8354"), Color("#73d2de"), Color("#b08968"), Color("#d6c7a1"), Color("#f4c542")]
+const TOWER_COSTS := [70, 100, 130, 80, 100, 120, 160]
+const TOWER_NAMES := ["Archer", "Cannon", "Frost", "Barricade", "Foundation", "Gold Mine", "Charge Tower"]
+const TOWER_COLORS := [Color("#ffd166"), Color("#ef8354"), Color("#73d2de"), Color("#b08968"), Color("#d6c7a1"), Color("#f4c542"), Color("#b388ff")]
 const BARRIER_MAX_HP := 800.0
 const BARRIER_SIZE := 72.0
 const ENEMY_BASE_ATTACK := 20.0
@@ -58,12 +58,14 @@ var sfx_players: Array[AudioStreamPlayer] = []
 var sfx_player_index := 0
 var music_player: AudioStreamPlayer
 var last_touch_time_ms := -1000
+var energy_blast_time := 0.0
+var energy_blast_origin := Vector2.ZERO
 
 func localize(english: String, chinese_text: String) -> String:
 	return chinese_text if chinese else english
 
 func tower_name(type: int) -> String:
-	var chinese_names := ["弓箭塔", "火炮塔", "冰霜塔", "路障", "地基", "矿塔"]
+	var chinese_names := ["弓箭塔", "火炮塔", "冰霜塔", "路障", "地基", "矿塔", "蓄能塔"]
 	return chinese_names[type] if chinese else TOWER_NAMES[type]
 
 func difficulty_name() -> String:
@@ -305,6 +307,7 @@ func generate_build_spots() -> void:
 
 func _process(delta: float) -> void:
 	if banner_time > 0.0: banner_time -= delta
+	energy_blast_time = maxf(0.0, energy_blast_time - delta)
 	if game_over: queue_redraw(); return
 	if wave_active:
 		spawn_timer -= delta
@@ -421,13 +424,34 @@ func update_towers(delta: float) -> void:
 				var p: int = e.seg
 				if p > progress: progress = p; best = i
 		if best >= 0:
-			var damage: float = [17.0, 34.0, 9.0][t.type] * (1.0 + (t.level - 1) * 0.55)
+			var base_damage: float = 24.0 if t.type == 6 else [17.0, 34.0, 9.0][t.type]
+			var damage: float = base_damage * (1.0 + (t.level - 1) * 0.55)
 			shots.append({"from":t.pos,"to":enemies[best].pos,"life":0.12,"color":TOWER_COLORS[t.type]})
 			enemies[best].hp -= damage
 			enemies[best].flash = 0.1
 			if t.type == 2: enemies[best].slow = 1.4
-			play_sfx(["arrow", "fireball", "freeze"][t.type])
-			t.cool = ([0.62, 1.25, 0.42][t.type] / (1.0 + (t.level - 1) * 0.18)) * tower_cooldown_multiplier()
+			if t.type == 6:
+				t.charge += 1
+				play_sfx("fireball", 1.35)
+				if t.charge >= 10:
+					trigger_energy_blast(t)
+			else:
+				play_sfx(["arrow", "fireball", "freeze"][t.type])
+			var base_cooldown: float = 0.8 if t.type == 6 else [0.62, 1.25, 0.42][t.type]
+			t.cool = (base_cooldown / (1.0 + (t.level - 1) * 0.18)) * tower_cooldown_multiplier()
+
+func trigger_energy_blast(t: Dictionary) -> void:
+	t.charge = 0
+	energy_blast_time = 0.8
+	energy_blast_origin = t.pos
+	for enemy in enemies:
+		enemy.hp -= 600.0
+		enemy.flash = 0.35
+		shots.append({"from":t.pos,"to":enemy.pos,"life":0.35,"color":TOWER_COLORS[6]})
+	play_sfx("fireball", 0.65)
+	play_sfx("freeze", 0.75)
+	banner = localize("ENERGY BLAST! All enemies take 600 damage", "蓄能爆发！全屏怪物受到 600 点伤害")
+	banner_time = 2.5
 
 func update_shots(delta: float) -> void:
 	for i in range(shots.size()-1,-1,-1):
@@ -440,8 +464,8 @@ func build_at(index: int) -> void:
 	if gold < cost: banner = localize("Not enough gold", "金币不足"); banner_time = 2.0; return
 	gold -= cost
 	play_sfx("coin_spend")
-	var tower_range: float = 0.0 if selected_type == 5 else [210.0,185.0,200.0][selected_type]
-	towers.append({"spot":index,"pos":active_build_spots[index],"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0})
+	var tower_range: float = 0.0 if selected_type == 5 else (230.0 if selected_type == 6 else [210.0,185.0,200.0][selected_type])
+	towers.append({"spot":index,"pos":active_build_spots[index],"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0,"charge":0})
 	selected_tower = towers.size()-1
 	play_sfx("build")
 	banner = localize("%s tower built", "已建造%s") % tower_name(selected_type)
@@ -481,13 +505,13 @@ func build_foundation(pos: Vector2) -> void:
 
 func build_on_foundation(index: int) -> void:
 	if foundations[index].occupied: return
-	if selected_type not in [0,1,2,5]: return
+	if selected_type not in [0,1,2,5,6]: return
 	var cost: int = TOWER_COSTS[selected_type]
 	if gold < cost: banner = localize("Not enough gold", "金币不足"); banner_time = 2.0; return
 	gold -= cost
 	play_sfx("coin_spend")
-	var tower_range: float = 0.0 if selected_type == 5 else [210.0,185.0,200.0][selected_type]
-	towers.append({"spot":-1,"foundation":index,"pos":foundations[index].pos,"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0})
+	var tower_range: float = 0.0 if selected_type == 5 else (230.0 if selected_type == 6 else [210.0,185.0,200.0][selected_type])
+	towers.append({"spot":-1,"foundation":index,"pos":foundations[index].pos,"type":selected_type,"level":1,"cool":0.2,"range":tower_range,"spent":cost,"income_timer":3.0,"charge":0})
 	foundations[index].occupied = true
 	selected_tower = towers.size() - 1
 	play_sfx("build")
@@ -528,8 +552,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if game_over:
 			if Rect2(1080,625,170,55).has_point(p): restart_game()
 			return
-		for i in 6:
-			if Rect2(PANEL_X+24,135+i*46,232,40).has_point(p): selected_type=i; selected_tower=-1; return
+		for i in TOWER_COSTS.size():
+			if Rect2(PANEL_X+24,135+i*38,232,34).has_point(p): selected_type=i; selected_tower=-1; return
 		if Rect2(PANEL_X+24,420,232,58).has_point(p): start_wave(); return
 		if selected_tower >= 0:
 			if Rect2(PANEL_X+24,510,110,48).has_point(p): upgrade_selected(); return
@@ -581,7 +605,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if si >= 0:
 			for i in towers.size():
 				if towers[i].spot == si: selected_tower=i; return
-			if selected_type in [0,1,2,5]:
+			if selected_type in [0,1,2,5,6]:
 				build_at(si)
 			else:
 				banner = "Choose a tower for this foundation"; banner_time = 2.0
@@ -635,7 +659,7 @@ func sell_selected() -> void:
 	towers.remove_at(selected_tower); selected_tower = -1
 
 func restart_game() -> void:
-	gold=240; lives=20; wave=0; score=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; bosses_spawned_this_wave=0; wave_active=false; game_over=false; victory=false; selected_tower=-1; randomize_map(); banner="A new random map begins"; banner_time=3.0
+	gold=240; lives=20; wave=0; score=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; bosses_spawned_this_wave=0; wave_active=false; game_over=false; victory=false; selected_tower=-1; energy_blast_time=0.0; randomize_map(); banner="A new random map begins"; banner_time=3.0
 
 func _draw() -> void:
 	# World
@@ -678,6 +702,12 @@ func _draw() -> void:
 	for b in barriers: draw_barrier(b)
 	for e in enemies: draw_enemy(e)
 	for s in shots: draw_line(s.from,s.to,s.color,4,true); draw_circle(s.to,7,s.color)
+	if energy_blast_time > 0.0:
+		var blast_progress := 1.0 - energy_blast_time / 0.8
+		var blast_radius := lerpf(45.0, 1150.0, blast_progress)
+		draw_circle(energy_blast_origin, blast_radius, Color(0.55,0.35,1.0,0.10 * (1.0-blast_progress)))
+		draw_arc(energy_blast_origin, blast_radius, 0, TAU, 96, Color(0.82,0.7,1.0,1.0-blast_progress), 12.0)
+		draw_arc(energy_blast_origin, blast_radius*0.72, 0, TAU, 96, Color(0.45,0.9,1.0,0.8*(1.0-blast_progress)), 6.0)
 	# panel
 	draw_rect(Rect2(PANEL_X,0,W-PANEL_X,H),Color("#17212b"))
 	draw_rect(Rect2(PANEL_X+10,10,260,700),Color("#22313f"),true)
@@ -685,7 +715,7 @@ func _draw() -> void:
 	draw_string(UI_FONT,Vector2(PANEL_X+28,88),localize("Gold  %d", "金币  %d")%gold,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ffd166"))
 	draw_string(UI_FONT,Vector2(PANEL_X+145,88),localize("Lives  %d", "生命  %d")%lives,HORIZONTAL_ALIGNMENT_LEFT,-1,22,Color("#ef6f6c"))
 	draw_string(UI_FONT,Vector2(PANEL_X+28,122),localize("Wave  %d/10    Score  %d", "波次  %d/10    分数  %d")%[wave,score],HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color.WHITE)
-	for i in 6: draw_tower_button(i)
+	for i in TOWER_COSTS.size(): draw_tower_button(i)
 	draw_button(Rect2(PANEL_X+24,420,232,58),localize("WAVE IN PROGRESS", "波次进行中") if wave_active else localize("START NEXT WAVE", "开始下一波"),Color("#4f9d69") if not wave_active else Color("#52616b"))
 	if selected_tower >= 0 and selected_tower < towers.size():
 		var t := towers[selected_tower]
@@ -717,7 +747,7 @@ func draw_castle(pos: Vector2) -> void:
 	if castle_tex: draw_texture_rect_region(castle_tex,Rect2(pos-Vector2(90,110),Vector2(180,180)),Rect2(0,0,min(192,castle_tex.get_width()),min(192,castle_tex.get_height())))
 
 func draw_tower(t: Dictionary, selected: bool) -> void:
-	var tex: Texture2D = tower_tex if t.type == 5 else [archery_tex,barracks_tex,tower_tex][t.type]
+	var tex: Texture2D = tower_tex if t.type in [5,6] else [archery_tex,barracks_tex,tower_tex][t.type]
 	if selected: draw_circle(t.pos,45,Color(1,1,1,0.25))
 	if t.level >= 2:
 		var platform_color: Color = Color("#f3c969") if t.level >= 3 else Color("#b8c7d1")
@@ -729,6 +759,11 @@ func draw_tower(t: Dictionary, selected: bool) -> void:
 	draw_string(UI_FONT,t.pos+Vector2(-8,41),str(t.level),HORIZONTAL_ALIGNMENT_CENTER,16,15,Color("#17212b"))
 	if t.type == 5:
 		draw_string(UI_FONT,t.pos+Vector2(-22,-55),"+10",HORIZONTAL_ALIGNMENT_CENTER,44,16,Color("#ffe066"))
+	elif t.type == 6:
+		var charge_ratio: float = float(t.charge) / 10.0
+		draw_circle(t.pos+Vector2(0,-28),18,Color("#24143d"))
+		draw_arc(t.pos+Vector2(0,-28),18,-PI/2.0,-PI/2.0+TAU*charge_ratio,32,TOWER_COLORS[6],5.0)
+		draw_string(UI_FONT,t.pos+Vector2(-14,-22),"%d" % t.charge,HORIZONTAL_ALIGNMENT_CENTER,28,13,Color.WHITE)
 
 func draw_tower_upgrade_details(t: Dictionary) -> void:
 	if t.level < 2 or t.type == 5: return
@@ -798,22 +833,26 @@ func draw_barrier(b: Dictionary) -> void:
 	draw_string(UI_FONT,b.pos+Vector2(-25,52),"%d" % ceil(b.hp),HORIZONTAL_ALIGNMENT_CENTER,50,13,Color.WHITE)
 
 func draw_tower_button(i: int) -> void:
-	var r := Rect2(PANEL_X+24,135+i*46,232,40)
+	var r := Rect2(PANEL_X+24,135+i*38,232,34)
 	draw_rect(r,Color("#31475a") if selected_type!=i else Color("#49677f"),true)
 	draw_rect(r,TOWER_COLORS[i],false,3)
-	draw_circle(r.position+Vector2(25,20),13,TOWER_COLORS[i])
-	draw_shop_icon(i, r.position + Vector2(25,20))
-	draw_string(UI_FONT,r.position+Vector2(47,18),tower_name(i),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color.WHITE)
-	draw_string(UI_FONT,r.position+Vector2(158,25),"%d G"%TOWER_COSTS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#ffd166"))
+	draw_circle(r.position+Vector2(25,17),12,TOWER_COLORS[i])
+	draw_shop_icon(i, r.position + Vector2(25,17))
+	draw_string(UI_FONT,r.position+Vector2(47,20),tower_name(i),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color.WHITE)
+	draw_string(UI_FONT,r.position+Vector2(180,21),"%d G"%TOWER_COSTS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color("#ffd166"))
 
 func draw_shop_icon(type: int, center: Vector2) -> void:
-	if type in [0,1,2,5]:
-		var tex: Texture2D = tower_tex if type in [2,5] else (archery_tex if type == 0 else barracks_tex)
+	if type in [0,1,2,5,6]:
+		var tex: Texture2D = tower_tex if type in [2,5,6] else (archery_tex if type == 0 else barracks_tex)
 		if tex:
 			draw_texture_rect_region(tex,Rect2(center-Vector2(15,18),Vector2(30,30)),Rect2(0,0,min(192,tex.get_width()),min(192,tex.get_height())))
 		if type == 5:
 			draw_circle(center+Vector2(8,-8),6,Color("#f9c74f"))
 			draw_string(UI_FONT,center+Vector2(4,-4),"$",HORIZONTAL_ALIGNMENT_CENTER,8,10,Color("#5c4612"))
+		elif type == 6:
+			draw_circle(center,10,Color("#30194f"))
+			draw_arc(center,10,0,TAU,20,TOWER_COLORS[6],3.0)
+			draw_circle(center,4,Color("#e8dcff"))
 	elif type == 3:
 		draw_line(center+Vector2(-9,-7),center+Vector2(9,7),Color("#4a2f1b"),5,true)
 		draw_line(center+Vector2(-9,7),center+Vector2(9,-7),Color("#e0b27a"),5,true)
