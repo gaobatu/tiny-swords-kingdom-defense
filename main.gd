@@ -859,9 +859,9 @@ func _draw() -> void:
 	draw_button(Rect2(PANEL_X+176,560,80,28),"中文" if not chinese else "EN",Color("#596f82"),14)
 	draw_button(Rect2(PANEL_X+24,560,142,28),localize("MODE ", "难度 ")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")),14)
 	for stage_index in 4:
-		var stage_labels := [localize("1 G", "1 草"),localize("2 F", "2 火"),localize("3 I", "3 冰"),localize("4 D", "4 魔")]
+		var stage_labels := [localize("1 GRASS", "1 草原"),localize("2 FLAME", "2 火焰"),localize("3 ICE", "3 冰冻"),localize("4 DEVIL", "4 魔鬼")]
 		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa"),Color("#7b2c74")]
-		draw_button(Rect2(PANEL_X+24+stage_index*60,603,56,28),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"),14)
+		draw_button(Rect2(PANEL_X+24+stage_index*60,603,56,28),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"),10)
 	draw_string(UI_FONT,Vector2(PANEL_X+26,650),localize("Stage / Weather: ", "关卡 / 天气：")+stage_name()+" / "+weather_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#f8d56b"))
 	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%"),localize("Tower damage 75% / speed +25%\nBarrier HP 50% / income divided by 1.5", "塔伤害75% / 攻速+25%\n路障生命50% / 金币收入除以1.5")][stage]
 	effect_text += "\n" + weather_effect_text()
