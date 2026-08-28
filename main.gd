@@ -94,8 +94,12 @@ func weather_speed_multiplier() -> float:
 	return [1.0, 0.85, 1.15, 1.1, 0.75, 0.85][weather]
 
 func choose_weather() -> void:
-	var stage_weather_tables := [[0,0,1,1,2], [0,3,3,2,1], [0,4,4,5,5]]
-	weather = stage_weather_tables[stage].pick_random()
+	var roll := randi_range(0, 99)
+	if roll < 50:
+		weather = 0
+	else:
+		# 50-59 rain, 60-69 storm, 70-79 heatwave, 80-89 blizzard, 90-99 snow.
+		weather = 1 + int((roll - 50) / 10)
 
 func weather_effect_text() -> String:
 	var english_effects := ["No enemy modifier", "Enemies: -10% HP / -10% ATK / -15% speed", "Enemies: +10% HP / +15% ATK / +15% speed", "Enemies: +25% ATK / +10% speed", "Enemies: +15% HP / -25% speed", "Enemies: +10% HP / -10% ATK / -15% speed"]
