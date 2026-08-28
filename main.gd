@@ -27,7 +27,7 @@ var selected_type := 0
 var selected_tower := -1
 var chinese := false
 var difficulty := 1 # 0 easy, 1 normal, 2 hard
-var stage := 0 # 0 grassland, 1 flame, 2 frozen
+var stage := 0 # 0 grassland, 1 flame, 2 frozen, 3 devil
 var weather := 0 # 0 clear, 1 rain, 2 storm, 3 heatwave, 4 blizzard, 5 snow
 var enemies: Array[Dictionary] = []
 var towers: Array[Dictionary] = []
@@ -75,8 +75,8 @@ func difficulty_name() -> String:
 	return chinese_names[difficulty] if chinese else english_names[difficulty]
 
 func stage_name() -> String:
-	var english_names := ["GRASS", "FLAME", "FROZEN"]
-	var chinese_names := ["草原", "火焰", "冰冻"]
+	var english_names := ["GRASS", "FLAME", "FROZEN", "DEVIL"]
+	var chinese_names := ["草原", "火焰", "冰冻", "魔鬼"]
 	return chinese_names[stage] if chinese else english_names[stage]
 
 func weather_name() -> String:
@@ -115,7 +115,18 @@ func enemy_damage_multiplier() -> float:
 	return 1.5 if stage == 1 else 1.0
 
 func tower_cooldown_multiplier() -> float:
-	return 1.5 if stage == 2 else 1.0
+	if stage == 2: return 1.5
+	if stage == 3: return 1.0 / 1.25
+	return 1.0
+
+func tower_damage_multiplier() -> float:
+	return 0.75 if stage == 3 else 1.0
+
+func barrier_hp_for_stage() -> float:
+	return BARRIER_MAX_HP * (0.5 if stage == 3 else 1.0)
+
+func gold_income(amount: float) -> int:
+	return maxi(1, int(floor(amount / 1.5))) if stage == 3 else int(amount)
 
 func boss_count_for_wave(current_wave: int) -> int:
 	if difficulty == 2:
@@ -386,7 +397,7 @@ func _process(delta: float) -> void:
 		if wave >= 10:
 			victory = true; game_over = true; banner = localize("KINGDOM SAVED!", "王国守住了！"); banner_time = 999.0
 		else:
-			gold += 35 + wave * 4
+			gold += gold_income(35 + wave * 4)
 			play_sfx("coin_gain")
 			banner = localize("Wave cleared! Bonus gold awarded", "波次完成！已获得额外金币")
 			banner_time = 3.0
@@ -426,7 +437,7 @@ func update_enemies(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		var e := enemies[i]
 		if e.hp <= 0:
-			gold += e.reward; score += e.reward * 10; play_sfx("enemy_down", 0.72 if e.boss else 1.0); play_sfx("coin_gain", 1.15); enemies.remove_at(i); continue
+			gold += gold_income(e.reward); score += e.reward * 10; play_sfx("enemy_down", 0.72 if e.boss else 1.0); play_sfx("coin_gain", 1.15); enemies.remove_at(i); continue
 		e.flash = max(0.0, e.flash - delta)
 		e.slow = max(0.0, e.slow - delta)
 		e.attack_cd = max(0.0, e.attack_cd - delta)
@@ -473,7 +484,7 @@ func update_towers(delta: float) -> void:
 			if wave_active:
 				t.income_timer -= delta
 				if t.income_timer <= 0.0:
-					gold += 10
+					gold += gold_income(10)
 					play_sfx("coin_gain", 1.2)
 					t.income_timer += 3.0
 					shots.append({"from":t.pos,"to":t.pos-Vector2(0,38),"life":0.35,"color":TOWER_COLORS[5]})
@@ -489,7 +500,7 @@ func update_towers(delta: float) -> void:
 				if p > progress: progress = p; best = i
 		if best >= 0:
 			var base_damage: float = 24.0 if t.type == 6 else [17.0, 34.0, 9.0][t.type]
-			var damage: float = base_damage * (1.0 + (t.level - 1) * 0.55)
+			var damage: float = base_damage * (1.0 + (t.level - 1) * 0.55) * tower_damage_multiplier()
 			shots.append({"from":t.pos,"to":enemies[best].pos,"life":0.12,"color":TOWER_COLORS[t.type]})
 			enemies[best].hp -= damage
 			enemies[best].flash = 0.1
@@ -510,14 +521,17 @@ func trigger_energy_blast(t: Dictionary) -> void:
 	energy_blast_origin = t.pos
 	for enemy_index in enemies.size():
 		if enemies[enemy_index].boss:
-			enemies[enemy_index].hp -= 600.0
+			enemies[enemy_index].hp -= 600.0 * tower_damage_multiplier()
 		else:
-			enemies[enemy_index].hp -= enemies[enemy_index].max_hp * 0.5
+			enemies[enemy_index].hp -= enemies[enemy_index].max_hp * 0.5 * tower_damage_multiplier()
 		enemies[enemy_index].flash = 0.35
 		shots.append({"from":t.pos,"to":enemies[enemy_index].pos,"life":0.35,"color":TOWER_COLORS[6]})
 	play_sfx("fireball", 0.65)
 	play_sfx("freeze", 0.75)
-	banner = localize("ENERGY BLAST! Boss -600 HP, troops lose 50% max HP", "蓄能爆发！BOSS 受到 600 点伤害，小怪损失 50% 最大生命")
+	if stage == 3:
+		banner = localize("ENERGY BLAST! Boss -450 HP, troops lose 37.5% max HP", "蓄能爆发！BOSS 受到 450 点伤害，小怪损失 37.5% 最大生命")
+	else:
+		banner = localize("ENERGY BLAST! Boss -600 HP, troops lose 50% max HP", "蓄能爆发！BOSS 受到 600 点伤害，小怪损失 50% 最大生命")
 	banner_time = 2.5
 
 func update_shots(delta: float) -> void:
@@ -547,9 +561,10 @@ func build_barrier(pos: Vector2, segment: int) -> void:
 		banner = "Cannot block the entrance or castle gate"; banner_time = 2.0; return
 	gold -= cost
 	play_sfx("coin_spend")
-	barriers.append({"pos":pos,"seg":segment,"hp":BARRIER_MAX_HP,"max_hp":BARRIER_MAX_HP,"flash":0.0,"spent":cost})
+	var barrier_hp := barrier_hp_for_stage()
+	barriers.append({"pos":pos,"seg":segment,"hp":barrier_hp,"max_hp":barrier_hp,"flash":0.0,"spent":cost})
 	play_sfx("build")
-	banner = localize("Barricade placed: 800 HP", "路障已放置：800 点生命")
+	banner = localize("Barricade placed: %d HP", "路障已放置：%d 点生命") % int(barrier_hp)
 	banner_time = 2.0
 
 func build_foundation(pos: Vector2) -> void:
@@ -638,8 +653,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				banner = localize("Difficulty: %s", "难度：%s") % difficulty_name()
 			banner_time = 2.0
 			return
-		for stage_index in 3:
-			if Rect2(PANEL_X+24+stage_index*78,602,72,30).has_point(p):
+		for stage_index in 4:
+			if Rect2(PANEL_X+24+stage_index*60,602,56,30).has_point(p):
 				if wave > 0 or wave_active:
 					banner = localize("Stage can only change before wave 1", "只能在第一波开始前更换关卡")
 				else:
@@ -721,7 +736,7 @@ func sell_selected() -> void:
 	if selected_tower < 0 or selected_tower >= towers.size(): return
 	if towers[selected_tower].has("foundation") and towers[selected_tower].foundation >= 0:
 		foundations[towers[selected_tower].foundation].occupied = false
-	gold += int(towers[selected_tower].spent * 0.7)
+	gold += gold_income(towers[selected_tower].spent * 0.7)
 	play_sfx("coin_gain")
 	towers.remove_at(selected_tower); selected_tower = -1
 
@@ -730,7 +745,7 @@ func restart_game() -> void:
 
 func _draw() -> void:
 	# World
-	var world_color: Color = [Color("#80b85a"), Color("#8f3f2f"), Color("#8fc4d6")][stage]
+	var world_color: Color = [Color("#80b85a"), Color("#8f3f2f"), Color("#8fc4d6"), Color("#291b35")][stage]
 	draw_rect(Rect2(0,0,WORLD_W,WORLD_H), world_color)
 	for x in range(0,int(WORLD_W),64):
 		for y in range(0,int(WORLD_H),64):
@@ -741,12 +756,17 @@ func _draw() -> void:
 	elif stage == 2:
 		for crystal_pos in [Vector2(80,100),Vector2(290,170),Vector2(610,75),Vector2(850,320),Vector2(450,610),Vector2(920,590)]:
 			draw_colored_polygon(PackedVector2Array([crystal_pos+Vector2(0,-20),crystal_pos+Vector2(13,12),crystal_pos+Vector2(-13,12)]),Color("#d9f3ffbb"))
+	elif stage == 3:
+		for rune_pos in [Vector2(85,100),Vector2(300,180),Vector2(620,85),Vector2(850,325),Vector2(455,610),Vector2(920,590)]:
+			draw_circle(rune_pos,20,Color("#160d20cc"))
+			draw_arc(rune_pos,15,0,TAU,6,Color("#e639a6cc"),3.0)
+			draw_circle(rune_pos,5,Color("#ff6b35dd"))
 	# River and path
-	draw_rect(Rect2(0,WORLD_H-70,WORLD_W,70),[Color("#4fa4c4"),Color("#d64b2a"),Color("#cceeff")][stage])
-	var road_shadow: Color = [Color("#705c3d88"),Color("#281917aa"),Color("#6f8994aa")][stage]
-	var road_edge: Color = [Color("#9f7e4f"),Color("#351f1d"),Color("#7895a3")][stage]
-	var road_base: Color = [Color("#c6a66b"),Color("#4d2925"),Color("#9bb7c5")][stage]
-	var road_center: Color = [Color("#dfc184"),Color("#6f3b30"),Color("#d8edf4")][stage]
+	draw_rect(Rect2(0,WORLD_H-70,WORLD_W,70),[Color("#4fa4c4"),Color("#d64b2a"),Color("#cceeff"),Color("#9b2226")][stage])
+	var road_shadow: Color = [Color("#705c3d88"),Color("#281917aa"),Color("#6f8994aa"),Color("#08050baa")][stage]
+	var road_edge: Color = [Color("#9f7e4f"),Color("#351f1d"),Color("#7895a3"),Color("#16101d")][stage]
+	var road_base: Color = [Color("#c6a66b"),Color("#4d2925"),Color("#9bb7c5"),Color("#35243f")][stage]
+	var road_center: Color = [Color("#dfc184"),Color("#6f3b30"),Color("#d8edf4"),Color("#59375f")][stage]
 	# Layered strokes give the road a raised shoulder and a soft ground shadow.
 	for i in active_path.size()-1:
 		draw_line(active_path[i]+Vector2(4,6),active_path[i+1]+Vector2(4,6),road_shadow,PATH_WIDTH+16,true)
@@ -760,8 +780,8 @@ func _draw() -> void:
 		draw_circle(path_point,PATH_WIDTH*0.5,road_base)
 		draw_circle(path_point,(PATH_WIDTH-16)*0.5,road_center)
 	# Deterministic ruts and stones add texture without changing collision geometry.
-	var rut_color: Color = [Color("#9d7a4b66"),Color("#321b1966"),Color("#7893a066")][stage]
-	var stone_color: Color = [Color("#f0d49a88"),Color("#9a554688"),Color("#eefaffaa")][stage]
+	var rut_color: Color = [Color("#9d7a4b66"),Color("#321b1966"),Color("#7893a066"),Color("#130d1766")][stage]
+	var stone_color: Color = [Color("#f0d49a88"),Color("#9a554688"),Color("#eefaffaa"),Color("#e639a699")][stage]
 	for segment_index in active_path.size()-1:
 		var segment_start: Vector2 = active_path[segment_index]
 		var segment_end: Vector2 = active_path[segment_index+1]
@@ -838,12 +858,12 @@ func _draw() -> void:
 		draw_button(Rect2(PANEL_X+24,510,110,48),localize("UPGRADE", "升级"),Color("#3d7ea6")); draw_button(Rect2(PANEL_X+146,510,110,48),localize("SELL", "出售"),Color("#a35d5d"))
 	draw_button(Rect2(PANEL_X+176,565,80,30),"中文" if not chinese else "EN",Color("#596f82"))
 	draw_button(Rect2(PANEL_X+24,565,142,30),localize("MODE: ", "难度：")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")))
-	for stage_index in 3:
-		var stage_labels := [localize("1 GRASS", "1 草原"),localize("2 FLAME", "2 火焰"),localize("3 ICE", "3 冰冻")]
-		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa")]
-		draw_button(Rect2(PANEL_X+24+stage_index*78,602,72,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
+	for stage_index in 4:
+		var stage_labels := [localize("1 G", "1 草"),localize("2 F", "2 火"),localize("3 I", "3 冰"),localize("4 D", "4 魔")]
+		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa"),Color("#7b2c74")]
+		draw_button(Rect2(PANEL_X+24+stage_index*60,602,56,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
 	draw_string(UI_FONT,Vector2(PANEL_X+26,650),localize("Stage / Weather: ", "关卡 / 天气：")+stage_name()+" / "+weather_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("#f8d56b"))
-	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%")][stage]
+	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%"),localize("Tower damage 75% / speed +25%\nBarrier HP 50% / income divided by 1.5", "塔伤害75% / 攻速+25%\n路障生命50% / 金币收入除以1.5")][stage]
 	effect_text += "\n" + weather_effect_text()
 	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,670),effect_text,HORIZONTAL_ALIGNMENT_LEFT,228,16,13,Color("#c9d6df"))
 	if banner_time > 0:
