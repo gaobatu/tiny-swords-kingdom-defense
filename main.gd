@@ -640,12 +640,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if selected_tower >= 0:
 			if Rect2(PANEL_X+24,510,110,48).has_point(p): upgrade_selected(); return
 			if Rect2(PANEL_X+146,510,110,48).has_point(p): sell_selected(); return
-		if Rect2(PANEL_X+176,565,80,30).has_point(p):
+		if Rect2(PANEL_X+176,560,80,28).has_point(p):
 			chinese = not chinese
 			banner = localize("Language switched to English", "语言已切换为中文")
 			banner_time = 2.0
 			return
-		if Rect2(PANEL_X+24,565,142,30).has_point(p):
+		if Rect2(PANEL_X+24,560,142,28).has_point(p):
 			if wave > 0 or wave_active:
 				banner = localize("Difficulty can only change before wave 1", "只能在第一波开始前更改难度")
 			else:
@@ -654,7 +654,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			banner_time = 2.0
 			return
 		for stage_index in 4:
-			if Rect2(PANEL_X+24+stage_index*60,602,56,30).has_point(p):
+			if Rect2(PANEL_X+24+stage_index*60,603,56,28).has_point(p):
 				if wave > 0 or wave_active:
 					banner = localize("Stage can only change before wave 1", "只能在第一波开始前更换关卡")
 				else:
@@ -856,16 +856,16 @@ func _draw() -> void:
 		var t := towers[selected_tower]
 		draw_string(UI_FONT,Vector2(PANEL_X+28,500),"%s  %s%d"%[tower_name(t.type),localize("Lv.", "等级 "),t.level],HORIZONTAL_ALIGNMENT_LEFT,-1,20,TOWER_COLORS[t.type])
 		draw_button(Rect2(PANEL_X+24,510,110,48),localize("UPGRADE", "升级"),Color("#3d7ea6")); draw_button(Rect2(PANEL_X+146,510,110,48),localize("SELL", "出售"),Color("#a35d5d"))
-	draw_button(Rect2(PANEL_X+176,565,80,30),"中文" if not chinese else "EN",Color("#596f82"))
-	draw_button(Rect2(PANEL_X+24,565,142,30),localize("MODE: ", "难度：")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")))
+	draw_button(Rect2(PANEL_X+176,560,80,28),"中文" if not chinese else "EN",Color("#596f82"),14)
+	draw_button(Rect2(PANEL_X+24,560,142,28),localize("MODE ", "难度 ")+difficulty_name(),Color("#7768ae") if difficulty==2 else (Color("#5c9b68") if difficulty==0 else Color("#596f82")),14)
 	for stage_index in 4:
 		var stage_labels := [localize("1 G", "1 草"),localize("2 F", "2 火"),localize("3 I", "3 冰"),localize("4 D", "4 魔")]
 		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa"),Color("#7b2c74")]
-		draw_button(Rect2(PANEL_X+24+stage_index*60,602,56,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
-	draw_string(UI_FONT,Vector2(PANEL_X+26,650),localize("Stage / Weather: ", "关卡 / 天气：")+stage_name()+" / "+weather_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,14,Color("#f8d56b"))
+		draw_button(Rect2(PANEL_X+24+stage_index*60,603,56,28),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"),14)
+	draw_string(UI_FONT,Vector2(PANEL_X+26,650),localize("Stage / Weather: ", "关卡 / 天气：")+stage_name()+" / "+weather_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("#f8d56b"))
 	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%"),localize("Tower damage 75% / speed +25%\nBarrier HP 50% / income divided by 1.5", "塔伤害75% / 攻速+25%\n路障生命50% / 金币收入除以1.5")][stage]
 	effect_text += "\n" + weather_effect_text()
-	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,676),effect_text,HORIZONTAL_ALIGNMENT_LEFT,228,12,3,Color("#c9d6df"))
+	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,675),effect_text,HORIZONTAL_ALIGNMENT_LEFT,228,11,3,Color("#c9d6df"))
 	if banner_time > 0:
 		draw_rect(Rect2(210,22,580,48),Color(0.05,0.08,0.12,0.88),true)
 		draw_string(UI_FONT,Vector2(210,54),banner,HORIZONTAL_ALIGNMENT_CENTER,580,21,Color.WHITE)
@@ -998,6 +998,6 @@ func draw_shop_icon(type: int, center: Vector2) -> void:
 		draw_rect(Rect2(center-Vector2(8,5),Vector2(16,10)),Color("#d6c7a1"),true)
 		draw_string(UI_FONT,center+Vector2(-6,5),"+",HORIZONTAL_ALIGNMENT_CENTER,12,12,Color("#4a403a"))
 
-func draw_button(r: Rect2, text: String, color: Color) -> void:
+func draw_button(r: Rect2, text: String, color: Color, font_size: int = 17) -> void:
 	draw_rect(r,color,true); draw_rect(r,Color(1,1,1,0.2),false,2)
-	draw_string(UI_FONT,r.position+Vector2(0,r.size.y/2+7),text,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,17,Color.WHITE)
+	draw_string(UI_FONT,r.position+Vector2(0,r.size.y/2+font_size*0.38),text,HORIZONTAL_ALIGNMENT_CENTER,r.size.x,font_size,Color.WHITE)
