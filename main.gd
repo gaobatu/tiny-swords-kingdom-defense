@@ -445,12 +445,12 @@ func trigger_energy_blast(t: Dictionary) -> void:
 	energy_blast_time = 0.8
 	energy_blast_origin = t.pos
 	for enemy in enemies:
-		enemy.hp -= 600.0
+		enemy.hp -= 300.0
 		enemy.flash = 0.35
 		shots.append({"from":t.pos,"to":enemy.pos,"life":0.35,"color":TOWER_COLORS[6]})
 	play_sfx("fireball", 0.65)
 	play_sfx("freeze", 0.75)
-	banner = localize("ENERGY BLAST! All enemies take 600 damage", "蓄能爆发！全屏怪物受到 600 点伤害")
+	banner = localize("ENERGY BLAST! All enemies take 300 damage", "蓄能爆发！全屏怪物受到 300 点伤害")
 	banner_time = 2.5
 
 func update_shots(delta: float) -> void:
