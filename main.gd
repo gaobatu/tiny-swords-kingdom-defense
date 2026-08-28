@@ -326,7 +326,7 @@ func generate_build_spots() -> void:
 	active_build_spots.clear()
 	# Reserve build pads inside road bends before filling the remaining pads randomly.
 	for corner_index in range(1, active_path.size() - 1):
-		if active_build_spots.size() >= 6: break
+		if active_build_spots.size() >= 2: break
 		var corner: Vector2 = active_path[corner_index]
 		var incoming := (corner - active_path[corner_index - 1]).normalized()
 		var outgoing := (active_path[corner_index + 1] - corner).normalized()
@@ -350,6 +350,17 @@ func generate_build_spots() -> void:
 		var candidate := Vector2(randf_range(85.0, PANEL_X-85.0), randf_range(90.0, H-100.0))
 		if nearest_path_point(candidate).distance < PATH_WIDTH * 0.5 + 52.0: continue
 		if candidate.distance_to(active_path[-1]) < 145.0: continue
+		# The two reserved bend pads are the only initial pads allowed near road corners.
+		var near_bend := false
+		for corner_index in range(1, active_path.size() - 1):
+			var incoming := (active_path[corner_index] - active_path[corner_index - 1]).normalized()
+			var outgoing := (active_path[corner_index + 1] - active_path[corner_index]).normalized()
+			if absf(incoming.dot(outgoing)) <= 0.1:
+				var bend_center := active_path[corner_index] + (-incoming + outgoing).normalized() * 128.0
+				if candidate.distance_to(bend_center) < 90.0:
+					near_bend = true
+					break
+		if near_bend: continue
 		var valid := true
 		for existing in active_build_spots:
 			if candidate.distance_to(existing) < 92.0:
