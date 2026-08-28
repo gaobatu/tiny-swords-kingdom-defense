@@ -743,9 +743,38 @@ func _draw() -> void:
 			draw_colored_polygon(PackedVector2Array([crystal_pos+Vector2(0,-20),crystal_pos+Vector2(13,12),crystal_pos+Vector2(-13,12)]),Color("#d9f3ffbb"))
 	# River and path
 	draw_rect(Rect2(0,WORLD_H-70,WORLD_W,70),[Color("#4fa4c4"),Color("#d64b2a"),Color("#cceeff")][stage])
+	var road_shadow: Color = [Color("#705c3d88"),Color("#281917aa"),Color("#6f8994aa")][stage]
+	var road_edge: Color = [Color("#9f7e4f"),Color("#351f1d"),Color("#7895a3")][stage]
+	var road_base: Color = [Color("#c6a66b"),Color("#4d2925"),Color("#9bb7c5")][stage]
+	var road_center: Color = [Color("#dfc184"),Color("#6f3b30"),Color("#d8edf4")][stage]
+	# Layered strokes give the road a raised shoulder and a soft ground shadow.
 	for i in active_path.size()-1:
-		draw_line(active_path[i],active_path[i+1],[Color("#c6a66b"),Color("#4d2925"),Color("#9bb7c5")][stage],PATH_WIDTH,true)
-		draw_line(active_path[i],active_path[i+1],[Color("#dfc184"),Color("#6f3b30"),Color("#d8edf4")][stage],PATH_WIDTH-14,true)
+		draw_line(active_path[i]+Vector2(4,6),active_path[i+1]+Vector2(4,6),road_shadow,PATH_WIDTH+16,true)
+		draw_line(active_path[i],active_path[i+1],road_edge,PATH_WIDTH+10,true)
+		draw_line(active_path[i],active_path[i+1],road_base,PATH_WIDTH,true)
+		draw_line(active_path[i],active_path[i+1],road_center,PATH_WIDTH-16,true)
+	# Circular joints remove square seams and make every bend look deliberately paved.
+	for path_point in active_path:
+		draw_circle(path_point+Vector2(4,6),(PATH_WIDTH+16)*0.5,road_shadow)
+		draw_circle(path_point,(PATH_WIDTH+10)*0.5,road_edge)
+		draw_circle(path_point,PATH_WIDTH*0.5,road_base)
+		draw_circle(path_point,(PATH_WIDTH-16)*0.5,road_center)
+	# Deterministic ruts and stones add texture without changing collision geometry.
+	var rut_color: Color = [Color("#9d7a4b66"),Color("#321b1966"),Color("#7893a066")][stage]
+	var stone_color: Color = [Color("#f0d49a88"),Color("#9a554688"),Color("#eefaffaa")][stage]
+	for segment_index in active_path.size()-1:
+		var segment_start: Vector2 = active_path[segment_index]
+		var segment_end: Vector2 = active_path[segment_index+1]
+		var segment_vector := segment_end-segment_start
+		var segment_length := segment_vector.length()
+		var segment_direction := segment_vector.normalized()
+		var segment_normal := Vector2(-segment_direction.y,segment_direction.x)
+		var mark_count := int(segment_length/48.0)
+		for mark_index in range(1,mark_count+1):
+			var road_mark := segment_start+segment_direction*(float(mark_index)*segment_length/float(mark_count+1))
+			var side := -1.0 if (mark_index+segment_index)%2==0 else 1.0
+			draw_line(road_mark-segment_normal*13.0,road_mark+segment_normal*13.0,rut_color,2.0,true)
+			draw_circle(road_mark+segment_normal*side*25.0,3.0,stone_color)
 	if selected_type == 3 and path_hover_valid:
 		draw_circle(hover_path, 30, Color(0.69,0.54,0.41,0.35))
 		draw_arc(hover_path,30,0,TAU,24,Color("#ffe0b2"),3)
