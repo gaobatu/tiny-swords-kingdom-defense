@@ -28,6 +28,7 @@ var selected_tower := -1
 var chinese := false
 var difficulty := 1 # 0 easy, 1 normal, 2 hard
 var stage := 0 # 0 grassland, 1 flame, 2 frozen
+var weather := 0 # 0 clear, 1 rain, 2 storm, 3 heatwave, 4 blizzard, 5 snow
 var enemies: Array[Dictionary] = []
 var towers: Array[Dictionary] = []
 var barriers: Array[Dictionary] = []
@@ -77,6 +78,29 @@ func stage_name() -> String:
 	var english_names := ["GRASS", "FLAME", "FROZEN"]
 	var chinese_names := ["草原", "火焰", "冰冻"]
 	return chinese_names[stage] if chinese else english_names[stage]
+
+func weather_name() -> String:
+	var english_names := ["CLEAR", "RAIN", "STORM", "HEATWAVE", "BLIZZARD", "SNOW"]
+	var chinese_names := ["晴朗", "降雨", "雷暴", "热浪", "暴雪", "小雪"]
+	return chinese_names[weather] if chinese else english_names[weather]
+
+func weather_hp_multiplier() -> float:
+	return [1.0, 0.9, 1.1, 1.0, 1.15, 1.1][weather]
+
+func weather_damage_multiplier() -> float:
+	return [1.0, 0.9, 1.15, 1.25, 1.0, 0.9][weather]
+
+func weather_speed_multiplier() -> float:
+	return [1.0, 0.85, 1.15, 1.1, 0.75, 0.85][weather]
+
+func choose_weather() -> void:
+	var stage_weather_tables := [[0,0,1,1,2], [0,3,3,2,1], [0,4,4,5,5]]
+	weather = stage_weather_tables[stage].pick_random()
+
+func weather_effect_text() -> String:
+	var english_effects := ["No enemy modifier", "Enemies: -10% HP / -10% ATK / -15% speed", "Enemies: +10% HP / +15% ATK / +15% speed", "Enemies: +25% ATK / +10% speed", "Enemies: +15% HP / -25% speed", "Enemies: +10% HP / -10% ATK / -15% speed"]
+	var chinese_effects := ["怪物无额外变化", "怪物：生命-10% / 攻击-10% / 速度-15%", "怪物：生命+10% / 攻击+15% / 速度+15%", "怪物：攻击+25% / 速度+10%", "怪物：生命+15% / 速度-25%", "怪物：生命+10% / 攻击-10% / 速度-15%"]
+	return chinese_effects[weather] if chinese else english_effects[weather]
 
 func enemy_hp_multiplier() -> float:
 	var multiplier := 0.5 if difficulty == 0 else 1.0
@@ -283,25 +307,28 @@ func play_sfx(sound_name: String, pitch: float = 1.0) -> void:
 
 func randomize_map() -> void:
 	active_path.clear()
-	var y1 := float(randi_range(90, 185))
-	var y2 := float(randi_range(475, 590))
-	var y3 := float(randi_range(155, 285))
-	var y4 := float(randi_range(405, 555))
-	var y5 := float(randi_range(100, 250))
-	active_path.assign([Vector2(-30,y1),Vector2(150,y1),Vector2(150,y2),Vector2(350,y2),Vector2(350,y3),Vector2(550,y3),Vector2(550,y4),Vector2(750,y4),Vector2(750,y5),Vector2(980,y5)])
+	var x_positions := [120.0, 270.0, 420.0, 570.0, 720.0, 860.0, 980.0]
+	var path_y: Array[float] = []
+	for i in x_positions.size():
+		path_y.append(randf_range(90.0, 245.0) if i % 2 == 0 else randf_range(430.0, 585.0))
+	active_path.append(Vector2(-30.0, path_y[0]))
+	for i in x_positions.size():
+		active_path.append(Vector2(x_positions[i], active_path[-1].y))
+		if i < x_positions.size() - 1:
+			active_path.append(Vector2(x_positions[i], path_y[i + 1]))
 	generate_build_spots()
 
 func generate_build_spots() -> void:
 	active_build_spots.clear()
 	var attempts := 0
-	while active_build_spots.size() < 7 and attempts < 1000:
+	while active_build_spots.size() < 8 and attempts < 1600:
 		attempts += 1
 		var candidate := Vector2(randf_range(85.0, PANEL_X-85.0), randf_range(90.0, H-100.0))
-		if nearest_path_point(candidate).distance < PATH_WIDTH * 0.5 + 45.0: continue
+		if nearest_path_point(candidate).distance < PATH_WIDTH * 0.5 + 52.0: continue
 		if candidate.distance_to(active_path[-1]) < 145.0: continue
 		var valid := true
 		for existing in active_build_spots:
-			if candidate.distance_to(existing) < 105.0:
+			if candidate.distance_to(existing) < 92.0:
 				valid = false; break
 		if valid: active_build_spots.append(candidate)
 
@@ -332,13 +359,14 @@ func _process(delta: float) -> void:
 
 func start_wave() -> void:
 	if wave_active or game_over: return
+	choose_weather()
 	wave += 1
 	boss_spawned_this_wave = false
 	bosses_spawned_this_wave = 0
 	spawn_left = 5 + wave * 2
 	spawn_timer = 0.1
 	wave_active = true
-	banner = localize("Wave %d incoming!", "第 %d 波来袭！") % wave
+	banner = localize("Wave %d incoming — Weather: %s", "第 %d 波来袭——天气：%s") % [wave, weather_name()]
 	banner_time = 2.0
 
 func spawn_enemy() -> void:
@@ -347,16 +375,17 @@ func spawn_enemy() -> void:
 	if is_boss:
 		boss_spawned_this_wave = true
 		bosses_spawned_this_wave += 1
-		var boss_hp := BOSS_HP * enemy_hp_multiplier()
-		enemies.append({"pos":active_path[0],"seg":0,"hp":boss_hp,"max_hp":boss_hp,"speed":42.0,"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK * enemy_damage_multiplier()})
+		var boss_hp := BOSS_HP * enemy_hp_multiplier() * weather_hp_multiplier()
+		enemies.append({"pos":active_path[0],"seg":0,"hp":boss_hp,"max_hp":boss_hp,"speed":42.0*weather_speed_multiplier(),"slow":0.0,"reward":250 + wave * 15,"tank":true,"boss":true,"flash":0.0,"attack_cd":0.0,"attack_damage":BOSS_ATTACK * enemy_damage_multiplier() * weather_damage_multiplier()})
 		banner = localize("BOSS INCOMING — %d HP!", "BOSS 来袭——%d 点生命！") % int(boss_hp)
 		banner_time = 3.0
 		return
-	var hp := (55.0 + wave * 25.0) * enemy_hp_multiplier()
+	var hp := (55.0 + wave * 25.0) * enemy_hp_multiplier() * weather_hp_multiplier()
 	var fast := wave % 3 == 0 and spawn_left % 3 == 0
 	var tank := wave >= 4 and spawn_left % 5 == 0
 	if tank: hp *= 2.3
-	enemies.append({"pos":active_path[0],"seg":0,"hp":hp,"max_hp":hp,"speed": (125.0 if fast else (54.0 if tank else 78.0)) + wave * 2.0,"slow":0.0,"reward":(20 if tank else 11) + wave,"tank":tank,"boss":false,"flash":0.0,"attack_cd":0.0,"attack_damage":(ENEMY_BASE_ATTACK + max(0, wave - 1) * 10.0) * enemy_damage_multiplier()})
+	var weather_speed := ((125.0 if fast else (54.0 if tank else 78.0)) + wave * 2.0) * weather_speed_multiplier()
+	enemies.append({"pos":active_path[0],"seg":0,"hp":hp,"max_hp":hp,"speed":weather_speed,"slow":0.0,"reward":(20 if tank else 11) + wave,"tank":tank,"boss":false,"flash":0.0,"attack_cd":0.0,"attack_damage":(ENEMY_BASE_ATTACK + max(0, wave - 1) * 10.0) * enemy_damage_multiplier() * weather_damage_multiplier()})
 
 func update_enemies(delta: float) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
@@ -662,7 +691,7 @@ func sell_selected() -> void:
 	towers.remove_at(selected_tower); selected_tower = -1
 
 func restart_game() -> void:
-	gold=240; lives=20; wave=0; score=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; bosses_spawned_this_wave=0; wave_active=false; game_over=false; victory=false; selected_tower=-1; energy_blast_time=0.0; randomize_map(); banner="A new random map begins"; banner_time=3.0
+	gold=240; lives=20; wave=0; score=0; weather=0; enemies.clear(); towers.clear(); barriers.clear(); foundations.clear(); shots.clear(); spawn_left=0; boss_spawned_this_wave=false; bosses_spawned_this_wave=0; wave_active=false; game_over=false; victory=false; selected_tower=-1; energy_blast_time=0.0; randomize_map(); banner="A new random map begins"; banner_time=3.0
 
 func _draw() -> void:
 	# World
@@ -711,6 +740,25 @@ func _draw() -> void:
 		draw_circle(energy_blast_origin, blast_radius, Color(0.55,0.35,1.0,0.10 * (1.0-blast_progress)))
 		draw_arc(energy_blast_origin, blast_radius, 0, TAU, 96, Color(0.82,0.7,1.0,1.0-blast_progress), 12.0)
 		draw_arc(energy_blast_origin, blast_radius*0.72, 0, TAU, 96, Color(0.45,0.9,1.0,0.8*(1.0-blast_progress)), 6.0)
+	# Weather overlay stays inside the battlefield and makes each wave readable at a glance.
+	var weather_motion := float(Time.get_ticks_msec() % 2000) / 2000.0
+	if weather in [1,2]:
+		draw_rect(Rect2(0,0,PANEL_X,H),Color(0.08,0.14,0.24,0.16 if weather == 1 else 0.28))
+		for drop_index in 36:
+			var drop_x := fmod(float(drop_index * 83) + weather_motion * 260.0, PANEL_X)
+			var drop_y := fmod(float(drop_index * 137) + weather_motion * 720.0, H)
+			draw_line(Vector2(drop_x,drop_y),Vector2(drop_x-8,drop_y+22),Color("#b9e6ff99"),2.0)
+	elif weather == 3:
+		draw_rect(Rect2(0,0,PANEL_X,H),Color("#ff6b3522"))
+		for heat_index in 6:
+			var heat_radius := 80.0 + fmod(weather_motion*180.0 + heat_index*47.0, 180.0)
+			draw_arc(Vector2(100.0+heat_index*170.0,620.0),heat_radius,PI,TAU,32,Color("#ffd16655"),3.0)
+	elif weather in [4,5]:
+		draw_rect(Rect2(0,0,PANEL_X,H),Color(0.75,0.9,1.0,0.14 if weather == 5 else 0.25))
+		for snow_index in 42:
+			var snow_x := fmod(float(snow_index * 97) + weather_motion * (80.0 if weather == 5 else 190.0), PANEL_X)
+			var snow_y := fmod(float(snow_index * 61) + weather_motion * 720.0, H)
+			draw_circle(Vector2(snow_x,snow_y),2.5 if weather == 5 else 4.0,Color("#ffffffbb"))
 	# panel
 	draw_rect(Rect2(PANEL_X,0,W-PANEL_X,H),Color("#17212b"))
 	draw_rect(Rect2(PANEL_X+10,10,260,700),Color("#22313f"),true)
@@ -730,9 +778,10 @@ func _draw() -> void:
 		var stage_labels := [localize("1 GRASS", "1 草原"),localize("2 FLAME", "2 火焰"),localize("3 ICE", "3 冰冻")]
 		var stage_colors := [Color("#5c9b68"),Color("#b6533c"),Color("#5b91aa")]
 		draw_button(Rect2(PANEL_X+24+stage_index*78,602,72,30),stage_labels[stage_index],stage_colors[stage_index] if stage==stage_index else Color("#455563"))
-	draw_string(UI_FONT,Vector2(PANEL_X+26,654),localize("Stage effect: ", "关卡效果：")+stage_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("#f8d56b"))
+	draw_string(UI_FONT,Vector2(PANEL_X+26,650),localize("Stage / Weather: ", "关卡 / 天气：")+stage_name()+" / "+weather_name(),HORIZONTAL_ALIGNMENT_LEFT,-1,15,Color("#f8d56b"))
 	var effect_text: String = [localize("No special effect", "无特殊效果"),localize("Barriers -10 HP/sec\nEnemies +50% damage", "路障每秒-10生命\n敌人伤害+50%"),localize("Slower tower attacks\nEnemies +50% HP", "塔攻击频率降低\n敌人生命+50%")][stage]
-	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,678),effect_text,HORIZONTAL_ALIGNMENT_LEFT,220,16,17,Color("#c9d6df"))
+	effect_text += "\n" + weather_effect_text()
+	draw_multiline_string(UI_FONT,Vector2(PANEL_X+26,670),effect_text,HORIZONTAL_ALIGNMENT_LEFT,228,16,13,Color("#c9d6df"))
 	if banner_time > 0:
 		draw_rect(Rect2(210,22,580,48),Color(0.05,0.08,0.12,0.88),true)
 		draw_string(UI_FONT,Vector2(210,54),banner,HORIZONTAL_ALIGNMENT_CENTER,580,21,Color.WHITE)
