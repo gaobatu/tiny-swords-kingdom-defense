@@ -444,16 +444,16 @@ func trigger_energy_blast(t: Dictionary) -> void:
 	t.charge = 0
 	energy_blast_time = 0.8
 	energy_blast_origin = t.pos
-	for enemy in enemies:
-		if enemy.boss:
-			enemy.hp -= 600.0
+	for enemy_index in enemies.size():
+		if enemies[enemy_index].boss:
+			enemies[enemy_index].hp -= 600.0
 		else:
-			enemy.hp *= 0.5
-		enemy.flash = 0.35
-		shots.append({"from":t.pos,"to":enemy.pos,"life":0.35,"color":TOWER_COLORS[6]})
+			enemies[enemy_index].hp -= enemies[enemy_index].max_hp * 0.5
+		enemies[enemy_index].flash = 0.35
+		shots.append({"from":t.pos,"to":enemies[enemy_index].pos,"life":0.35,"color":TOWER_COLORS[6]})
 	play_sfx("fireball", 0.65)
 	play_sfx("freeze", 0.75)
-	banner = localize("ENERGY BLAST! Boss -600 HP, troops lose 50% HP", "蓄能爆发！BOSS 受到 600 点伤害，小怪损失 50% 当前生命")
+	banner = localize("ENERGY BLAST! Boss -600 HP, troops lose 50% max HP", "蓄能爆发！BOSS 受到 600 点伤害，小怪损失 50% 最大生命")
 	banner_time = 2.5
 
 func update_shots(delta: float) -> void:
