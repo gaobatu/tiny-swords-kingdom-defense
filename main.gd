@@ -324,6 +324,26 @@ func randomize_map() -> void:
 
 func generate_build_spots() -> void:
 	active_build_spots.clear()
+	# Reserve build pads inside road bends before filling the remaining pads randomly.
+	for corner_index in range(1, active_path.size() - 1):
+		if active_build_spots.size() >= 6: break
+		var corner: Vector2 = active_path[corner_index]
+		var incoming := (corner - active_path[corner_index - 1]).normalized()
+		var outgoing := (active_path[corner_index + 1] - corner).normalized()
+		if absf(incoming.dot(outgoing)) > 0.1: continue
+		# The angle between the reversed incoming direction and outgoing direction is the bend interior.
+		var interior_direction := (-incoming + outgoing).normalized()
+		var bend_candidate := corner + interior_direction * 128.0
+		if bend_candidate.x < 60.0 or bend_candidate.x > PANEL_X - 60.0: continue
+		if bend_candidate.y < 75.0 or bend_candidate.y > H - 85.0: continue
+		if nearest_path_point(bend_candidate).distance < PATH_WIDTH * 0.5 + 42.0: continue
+		if bend_candidate.distance_to(active_path[-1]) < 145.0: continue
+		var bend_valid := true
+		for existing in active_build_spots:
+			if bend_candidate.distance_to(existing) < 92.0:
+				bend_valid = false
+				break
+		if bend_valid: active_build_spots.append(bend_candidate)
 	var attempts := 0
 	while active_build_spots.size() < 8 and attempts < 1600:
 		attempts += 1
